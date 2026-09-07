@@ -381,6 +381,12 @@ export const apiService = {
     return res.json();
   },
 
+  async getSecurityAudit(): Promise<any> {
+    const res = await fetch(`${API_BASE}/security/audit`);
+    if (!res.ok) throw new Error('Failed to fetch security audit');
+    return res.json();
+  },
+
   async getConfig(): Promise<Record<string, any>> {
     const res = await fetch(`${API_BASE}/config`);
     if (!res.ok) throw new Error('Failed to fetch config');

@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { BotControlBar } from './components/BotControlBar';
 import { ActivePositionCard } from './components/ActivePositionCard';
 import { TestnetCard } from './components/TestnetCard';
+import { SecurityAuditCard } from './components/SecurityAuditCard';
 import { AnalyticsCard } from './components/AnalyticsCard';
 import { MetricCards } from './components/MetricCards';
 import { AIPredictionCard } from './components/AIPredictionCard';
@@ -42,6 +43,7 @@ export function App() {
   const [activePosition, setActivePosition] = useState<ActivePosition | null>(null);
   const [testnetStatus, setTestnetStatus] = useState<TestnetStatusResponse | null>(null);
   const [testnetAccount, setTestnetAccount] = useState<TestnetAccountResponse | null>(null);
+  const [securityAudit, setSecurityAudit] = useState<any | null>(null);
   const [analytics, setAnalytics] = useState<any | null>(null);
   const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -76,6 +78,7 @@ export function App() {
         tnetStatusRes,
         tnetAccRes,
         analyticsRes,
+        securityRes,
       ] = await Promise.all([
         apiService.getBotStatus(),
         apiService.getAccountSummary(),
@@ -91,6 +94,7 @@ export function App() {
         apiService.getTestnetStatus().catch(() => null),
         apiService.getTestnetAccount().catch(() => null),
         apiService.getPerformanceAnalytics().catch(() => null),
+        apiService.getSecurityAudit().catch(() => null),
       ]);
       setStatus(statusRes);
       setAccount(accountRes);
@@ -106,6 +110,7 @@ export function App() {
       if (tnetStatusRes) setTestnetStatus(tnetStatusRes);
       if (tnetAccRes) setTestnetAccount(tnetAccRes);
       if (analyticsRes) setAnalytics(analyticsRes);
+      if (securityRes) setSecurityAudit(securityRes);
       setApiConnected(true);
     } catch (err: any) {
       console.warn('API polling warning:', err);
@@ -328,6 +333,9 @@ export function App() {
           testnetStatus={testnetStatus}
           testnetAccount={testnetAccount}
         />
+
+        {/* Security, Hardening & Resilience Audit */}
+        <SecurityAuditCard auditData={securityAudit} />
 
         {/* Risk & Strategy Gatekeeper */}
         <RiskStrategyCard

@@ -14,6 +14,7 @@ from backend.app.api.routes.strategy_routes import router as strategy_router
 from backend.app.api.routes.trading_routes import router as trading_router
 from backend.app.api.routes.testnet_routes import router as testnet_router
 from backend.app.api.routes.analytics_routes import router as analytics_router
+from backend.app.api.routes.security_routes import router as security_router
 from backend.app.api.websocket.ws_routes import router as ws_router
 
 api_router = APIRouter(prefix="/api/v1")
@@ -31,6 +32,7 @@ api_router.include_router(strategy_router)
 api_router.include_router(trading_router)
 api_router.include_router(testnet_router)
 api_router.include_router(analytics_router)
+api_router.include_router(security_router)
 api_router.include_router(ws_router)
 
 __all__ = ["api_router"]
