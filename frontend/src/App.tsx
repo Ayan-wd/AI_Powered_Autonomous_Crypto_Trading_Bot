@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { BotControlBar } from './components/BotControlBar';
 import { ActivePositionCard } from './components/ActivePositionCard';
 import { TestnetCard } from './components/TestnetCard';
+import { AnalyticsCard } from './components/AnalyticsCard';
 import { MetricCards } from './components/MetricCards';
 import { AIPredictionCard } from './components/AIPredictionCard';
 import { MarketOverviewCard } from './components/MarketOverviewCard';
@@ -23,6 +24,7 @@ import {
   type TestnetStatusResponse,
   type TickerResponse,
 } from './services/api';
+import { wsClient } from './services/websocket';
 import type { AccountSummary, BotStatus, TradeItem, TradeMetrics } from './types/trading';
 import { AlertCircle, Terminal } from 'lucide-react';
 
@@ -40,6 +42,7 @@ export function App() {
   const [activePosition, setActivePosition] = useState<ActivePosition | null>(null);
   const [testnetStatus, setTestnetStatus] = useState<TestnetStatusResponse | null>(null);
   const [testnetAccount, setTestnetAccount] = useState<TestnetAccountResponse | null>(null);
+  const [analytics, setAnalytics] = useState<any | null>(null);
   const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [syncingCandles, setSyncingCandles] = useState<boolean>(false);
@@ -49,6 +52,7 @@ export function App() {
   const [botActionLoading, setBotActionLoading] = useState<boolean>(false);
   const [closingPosition, setClosingPosition] = useState<boolean>(false);
   const [resettingPaper, setResettingPaper] = useState<boolean>(false);
+  const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [apiConnected, setApiConnected] = useState<boolean>(false);
 
   const fetchData = async () => {
@@ -71,6 +75,7 @@ export function App() {
         posRes,
         tnetStatusRes,
         tnetAccRes,
+        analyticsRes,
       ] = await Promise.all([
         apiService.getBotStatus(),
         apiService.getAccountSummary(),
@@ -85,6 +90,7 @@ export function App() {
         apiService.getActivePosition().catch(() => null),
         apiService.getTestnetStatus().catch(() => null),
         apiService.getTestnetAccount().catch(() => null),
+        apiService.getPerformanceAnalytics().catch(() => null),
       ]);
       setStatus(statusRes);
       setAccount(accountRes);
@@ -99,6 +105,7 @@ export function App() {
       if (posRes) setActivePosition(posRes.active_position);
       if (tnetStatusRes) setTestnetStatus(tnetStatusRes);
       if (tnetAccRes) setTestnetAccount(tnetAccRes);
+      if (analyticsRes) setAnalytics(analyticsRes);
       setApiConnected(true);
     } catch (err: any) {
       console.warn('API polling warning:', err);
@@ -111,7 +118,30 @@ export function App() {
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 4000);
-    return () => clearInterval(interval);
+
+    // WebSocket real-time connection
+    wsClient.connect();
+    const unsubscribe = wsClient.subscribe((event, data) => {
+      if (event === 'CONNECTION_OPEN') {
+        setWsConnected(true);
+      } else if (event === 'CONNECTION_CLOSED') {
+        setWsConnected(false);
+      } else if (event === 'TICKER_UPDATE' && data) {
+        setTicker((prev) => (prev ? { ...prev, ...data } : data));
+      } else if (event === 'POSITION_UPDATE') {
+        setActivePosition(data);
+      } else if (event === 'STRATEGY_DECISION') {
+        setStrategyDecision(data);
+      } else if (event === 'ORDER_FILLED' || event === 'POSITION_CLOSED') {
+        fetchData();
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      unsubscribe();
+      wsClient.disconnect();
+    };
   }, []);
 
   const handleStartBot = async () => {
@@ -254,6 +284,7 @@ export function App() {
         onKillSwitch={handleKillSwitch}
         onResetKillSwitch={handleResetKillSwitch}
         loading={loading}
+        wsConnected={wsConnected}
       />
 
       {/* Backend connection warning banner if not connected */}
@@ -279,6 +310,9 @@ export function App() {
 
         {/* Metric Cards Banner */}
         <MetricCards account={account} metrics={metrics} />
+
+        {/* Institutional Performance Analytics Card */}
+        <AnalyticsCard analytics={analytics} />
 
         {/* Active Paper Position Card */}
         <ActivePositionCard

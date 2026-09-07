@@ -375,6 +375,12 @@ export const apiService = {
     return res.json();
   },
 
+  async getPerformanceAnalytics(): Promise<any> {
+    const res = await fetch(`${API_BASE}/analytics/performance`);
+    if (!res.ok) throw new Error('Failed to fetch performance analytics');
+    return res.json();
+  },
+
   async getConfig(): Promise<Record<string, any>> {
     const res = await fetch(`${API_BASE}/config`);
     if (!res.ok) throw new Error('Failed to fetch config');

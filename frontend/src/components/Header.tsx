@@ -8,6 +8,7 @@ interface HeaderProps {
   onKillSwitch: () => void;
   onResetKillSwitch: () => void;
   loading: boolean;
+  wsConnected?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   onKillSwitch,
   onResetKillSwitch,
   loading,
+  wsConnected = false,
 }) => {
   const isEmergency = status?.kill_switch_active;
   const mode = status?.trading_mode || 'PAPER';
@@ -57,6 +59,21 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             {isEmergency ? 'EMERGENCY HALT' : status?.bot_state || 'INITIALIZING'}
+          </span>
+
+          <span
+            className={`px-2 py-0.5 text-[11px] font-mono font-medium rounded-full border flex items-center gap-1 ${
+              wsConnected
+                ? 'bg-emerald-950/60 text-emerald-400 border-emerald-700/60'
+                : 'bg-slate-800 text-slate-400 border-slate-700'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                wsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+              }`}
+            />
+            {wsConnected ? 'WS STREAMING' : 'WS CONNECTING'}
           </span>
         </div>
       </div>

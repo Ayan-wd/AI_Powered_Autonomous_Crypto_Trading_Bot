@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 import json
 
+from backend.app.api.websocket.ws_manager import ws_manager
 from backend.app.core.config import settings
 from backend.app.core.logging import logger
 from backend.app.data.market_data import MarketDataEngine
@@ -113,6 +114,17 @@ class TradingBotEngine:
             ticker = await self.market_engine.get_live_ticker(self.symbol)
             current_price = ticker.price
 
+            # Broadcast live tick to connected WebSocket clients
+            await ws_manager.broadcast("TICKER_UPDATE", {
+                "symbol": ticker.symbol,
+                "price": ticker.price,
+                "bid_price": ticker.bid_price,
+                "ask_price": ticker.ask_price,
+                "price_change_24h_pct": ticker.price_change_24h_pct,
+                "volume_24h": ticker.volume_24h,
+                "timestamp": ticker.timestamp,
+            })
+
             # 2. Evaluate active position Stop-Loss / Take-Profit triggers
             sl_tp_closed = await order_manager.check_intrabar_triggers(
                 current_price=current_price,
@@ -120,6 +132,7 @@ class TradingBotEngine:
             )
             if sl_tp_closed:
                 logger.info(f"Intrabar trigger closed trade: {sl_tp_closed['trade_id']} ({sl_tp_closed['exit_reason']})")
+                await ws_manager.broadcast("POSITION_CLOSED", sl_tp_closed)
 
             # 3. Fetch latest candles from DB or Binance fallback
             df = await self.market_engine.get_candles_dataframe(
@@ -146,6 +159,9 @@ class TradingBotEngine:
             decision["timestamp"] = datetime.now(timezone.utc).isoformat()
             self.last_decision = decision
 
+            # Broadcast strategy signal update
+            await ws_manager.broadcast("STRATEGY_DECISION", decision)
+
             # 6. Execute Trading Actions
             action = decision.get("action")
 
@@ -155,7 +171,7 @@ class TradingBotEngine:
                 if can_trade and decision.get("order_details"):
                     order_det = decision["order_details"]
                     logger.info(f"Executing BUY order based on strategy signal: {decision['reason']}")
-                    await order_manager.open_position(
+                    open_res = await order_manager.open_position(
                         symbol=self.symbol,
                         price=current_price,
                         position_size_usd=order_det["position_size_usd"],
@@ -166,16 +182,22 @@ class TradingBotEngine:
                         explanation_json=json.dumps(decision.get("numerical_explanation", [])),
                         session=session,
                     )
+                    await ws_manager.broadcast("ORDER_FILLED", open_res)
+                    await ws_manager.broadcast("POSITION_UPDATE", order_manager.get_active_position())
                 else:
                     logger.warning(f"Strategy signaled BUY but Risk Gatekeeper denied: {denial_reason}")
+                    await ws_manager.broadcast("RISK_DENIAL", {"reason": denial_reason})
 
             elif action == "SELL" and active_pos is not None:
                 logger.info(f"Executing SELL / CLOSE position based on strategy signal: {decision['reason']}")
-                await order_manager.close_position(
+                close_res = await order_manager.close_position(
                     exit_price=current_price,
                     exit_reason="STRATEGY_SELL",
                     session=session,
                 )
+                if close_res:
+                    await ws_manager.broadcast("POSITION_CLOSED", close_res)
+                    await ws_manager.broadcast("POSITION_UPDATE", None)
 
             # 7. Periodically record equity snapshot (every ~12 ticks = 60s)
             if self.iteration_count % 12 == 0:
@@ -195,6 +217,11 @@ class TradingBotEngine:
                     mode=settings.TRADING_MODE,
                 )
                 await equity_repo.create(snapshot)
+                await ws_manager.broadcast("EQUITY_UPDATE", {
+                    "total_equity": round(current_equity, 2),
+                    "drawdown_pct": round(dd_pct, 2),
+                    "unrealized_pnl": round(balances["unrealized_pnl"], 2),
+                })
 
 
 # Global singleton instance
