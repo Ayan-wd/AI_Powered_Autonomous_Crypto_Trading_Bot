@@ -151,6 +151,44 @@ export interface StrategyDecisionResponse {
   account_equity?: number;
 }
 
+export interface ActivePosition {
+  trade_id: string;
+  symbol: string;
+  side: string;
+  entry_price: number;
+  current_price: number;
+  quantity: number;
+  position_value_usd: number;
+  cost_basis_usd: number;
+  unrealized_pnl_usd: number;
+  unrealized_pnl_pct: number;
+  stop_loss: number | null;
+  take_profit: number | null;
+  highest_price: number;
+  entry_time: string;
+  model_probability?: number;
+  strategy_reason?: string;
+}
+
+export interface BotDaemonStatus {
+  is_running: boolean;
+  symbol: string;
+  timeframe: string;
+  mode: string;
+  iteration_count: number;
+  active_position: ActivePosition | null;
+  wallet: {
+    usdt_balance: number;
+    total_equity: number;
+    unrealized_pnl: number;
+    realized_pnl_total: number;
+    total_fees_paid: number;
+    has_open_position: boolean;
+  };
+  risk_snapshot: RiskStatusResponse;
+  last_decision: Record<string, any>;
+}
+
 export const apiService = {
   async getHealth(): Promise<HealthResponse> {
     const res = await fetch(`${API_BASE}/health`);
@@ -251,6 +289,50 @@ export const apiService = {
   async getStrategyDecision(symbol = 'BTCUSDT', timeframe = '15m'): Promise<StrategyDecisionResponse> {
     const res = await fetch(`${API_BASE}/strategy/decision?symbol=${symbol}&timeframe=${timeframe}`);
     if (!res.ok) throw new Error('Failed to fetch strategy decision');
+    return res.json();
+  },
+
+  async getBotDaemonStatus(): Promise<BotDaemonStatus> {
+    const res = await fetch(`${API_BASE}/trading/bot/status`);
+    if (!res.ok) throw new Error('Failed to fetch bot daemon status');
+    return res.json();
+  },
+
+  async startBot(symbol = 'BTCUSDT', timeframe = '15m'): Promise<any> {
+    const res = await fetch(`${API_BASE}/trading/bot/start?symbol=${symbol}&timeframe=${timeframe}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to start bot');
+    return res.json();
+  },
+
+  async stopBot(): Promise<any> {
+    const res = await fetch(`${API_BASE}/trading/bot/stop`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to stop bot');
+    return res.json();
+  },
+
+  async getActivePosition(): Promise<{ active_position: ActivePosition | null; has_open_position: boolean }> {
+    const res = await fetch(`${API_BASE}/trading/position`);
+    if (!res.ok) throw new Error('Failed to fetch active position');
+    return res.json();
+  },
+
+  async closePositionManually(reason = 'MANUAL_CLOSE'): Promise<any> {
+    const res = await fetch(`${API_BASE}/trading/position/close?reason=${reason}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to close position');
+    return res.json();
+  },
+
+  async resetPaperTrading(startingCapital = 50.0): Promise<any> {
+    const res = await fetch(`${API_BASE}/trading/paper/reset?starting_capital=${startingCapital}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to reset paper trading');
     return res.json();
   },
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Header } from './components/Header';
+import { BotControlBar } from './components/BotControlBar';
+import { ActivePositionCard } from './components/ActivePositionCard';
 import { MetricCards } from './components/MetricCards';
 import { AIPredictionCard } from './components/AIPredictionCard';
 import { MarketOverviewCard } from './components/MarketOverviewCard';
@@ -9,7 +11,9 @@ import { TradesTable } from './components/TradesTable';
 import { EquityChart } from './components/EquityChart';
 import {
   apiService,
+  type ActivePosition,
   type BenchmarkResponse,
+  type BotDaemonStatus,
   type FeaturesResponse,
   type MLPredictionResponse,
   type RiskStatusResponse,
@@ -29,12 +33,17 @@ export function App() {
   const [prediction, setPrediction] = useState<MLPredictionResponse | null>(null);
   const [riskStatus, setRiskStatus] = useState<RiskStatusResponse | null>(null);
   const [strategyDecision, setStrategyDecision] = useState<StrategyDecisionResponse | null>(null);
+  const [botDaemon, setBotDaemon] = useState<BotDaemonStatus | null>(null);
+  const [activePosition, setActivePosition] = useState<ActivePosition | null>(null);
   const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [syncingCandles, setSyncingCandles] = useState<boolean>(false);
   const [trainingModel, setTrainingModel] = useState<boolean>(false);
   const [evaluatingStrategy, setEvaluatingStrategy] = useState<boolean>(false);
   const [runningBenchmark, setRunningBenchmark] = useState<boolean>(false);
+  const [botActionLoading, setBotActionLoading] = useState<boolean>(false);
+  const [closingPosition, setClosingPosition] = useState<boolean>(false);
+  const [resettingPaper, setResettingPaper] = useState<boolean>(false);
   const [apiConnected, setApiConnected] = useState<boolean>(false);
 
   const fetchData = async () => {
@@ -43,18 +52,31 @@ export function App() {
       const symbol = status?.symbol || 'BTCUSDT';
       const timeframe = status?.timeframe || '15m';
 
-      const [statusRes, accountRes, tradesRes, metricsRes, tickerRes, featuresRes, predRes, riskRes, stratRes] =
-        await Promise.all([
-          apiService.getBotStatus(),
-          apiService.getAccountSummary(),
-          apiService.getTrades(50),
-          apiService.getTradeMetrics(),
-          apiService.getTicker(symbol).catch(() => null),
-          apiService.getLatestFeatures(symbol, timeframe).catch(() => null),
-          apiService.getMLPrediction(symbol, timeframe).catch(() => null),
-          apiService.getRiskStatus().catch(() => null),
-          apiService.getStrategyDecision(symbol, timeframe).catch(() => null),
-        ]);
+      const [
+        statusRes,
+        accountRes,
+        tradesRes,
+        metricsRes,
+        tickerRes,
+        featuresRes,
+        predRes,
+        riskRes,
+        stratRes,
+        daemonRes,
+        posRes,
+      ] = await Promise.all([
+        apiService.getBotStatus(),
+        apiService.getAccountSummary(),
+        apiService.getTrades(50),
+        apiService.getTradeMetrics(),
+        apiService.getTicker(symbol).catch(() => null),
+        apiService.getLatestFeatures(symbol, timeframe).catch(() => null),
+        apiService.getMLPrediction(symbol, timeframe).catch(() => null),
+        apiService.getRiskStatus().catch(() => null),
+        apiService.getStrategyDecision(symbol, timeframe).catch(() => null),
+        apiService.getBotDaemonStatus().catch(() => null),
+        apiService.getActivePosition().catch(() => null),
+      ]);
       setStatus(statusRes);
       setAccount(accountRes);
       setTrades(tradesRes);
@@ -64,6 +86,8 @@ export function App() {
       if (predRes && predRes.status === 'OK') setPrediction(predRes);
       if (riskRes) setRiskStatus(riskRes);
       if (stratRes) setStrategyDecision(stratRes);
+      if (daemonRes) setBotDaemon(daemonRes);
+      if (posRes) setActivePosition(posRes.active_position);
       setApiConnected(true);
     } catch (err: any) {
       console.warn('API polling warning:', err);
@@ -78,6 +102,59 @@ export function App() {
     const interval = setInterval(fetchData, 4000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleStartBot = async () => {
+    try {
+      setBotActionLoading(true);
+      await apiService.startBot(status?.symbol || 'BTCUSDT', status?.timeframe || '15m');
+      await fetchData();
+    } catch (e: any) {
+      alert('Error starting bot: ' + e.message);
+    } finally {
+      setBotActionLoading(false);
+    }
+  };
+
+  const handleStopBot = async () => {
+    try {
+      setBotActionLoading(true);
+      await apiService.stopBot();
+      await fetchData();
+    } catch (e: any) {
+      alert('Error stopping bot: ' + e.message);
+    } finally {
+      setBotActionLoading(false);
+    }
+  };
+
+  const handleClosePosition = async () => {
+    try {
+      setClosingPosition(true);
+      const res = await apiService.closePositionManually('MANUAL_CLOSE');
+      alert(res.message || 'Position closed successfully.');
+      await fetchData();
+    } catch (e: any) {
+      alert('Error closing position: ' + e.message);
+    } finally {
+      setClosingPosition(false);
+    }
+  };
+
+  const handleResetPaper = async () => {
+    if (!confirm('Are you sure you want to reset paper trading capital back to $50.00 USD?')) {
+      return;
+    }
+    try {
+      setResettingPaper(true);
+      const res = await apiService.resetPaperTrading(50.0);
+      alert(res.message || 'Paper trading reset complete.');
+      await fetchData();
+    } catch (e: any) {
+      alert('Error resetting paper trading: ' + e.message);
+    } finally {
+      setResettingPaper(false);
+    }
+  };
 
   const handleSyncCandles = async () => {
     try {
@@ -181,8 +258,25 @@ export function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+        {/* Autonomous Bot Control Bar */}
+        <BotControlBar
+          botDaemon={botDaemon}
+          onStartBot={handleStartBot}
+          onStopBot={handleStopBot}
+          loading={botActionLoading}
+        />
+
         {/* Metric Cards Banner */}
         <MetricCards account={account} metrics={metrics} />
+
+        {/* Active Paper Position Card */}
+        <ActivePositionCard
+          position={activePosition}
+          onClosePosition={handleClosePosition}
+          onResetPaper={handleResetPaper}
+          closing={closingPosition}
+          resetting={resettingPaper}
+        />
 
         {/* Risk & Strategy Gatekeeper */}
         <RiskStrategyCard

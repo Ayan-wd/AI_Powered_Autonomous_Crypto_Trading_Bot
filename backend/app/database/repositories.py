@@ -23,6 +23,15 @@ class TradeRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_open_trades(self, symbol: Optional[str] = None, is_paper: Optional[bool] = None) -> List[Trade]:
+        stmt = select(Trade).where(Trade.status == "OPEN")
+        if symbol:
+            stmt = stmt.where(Trade.symbol == symbol)
+        if is_paper is not None:
+            stmt = stmt.where(Trade.is_paper == is_paper)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_by_id(self, trade_id: str) -> Optional[Trade]:
         stmt = select(Trade).where(Trade.trade_id == trade_id)
         result = await self.session.execute(stmt)
@@ -33,6 +42,38 @@ class TradeRepository:
         await self.session.commit()
         await self.session.refresh(trade)
         return trade
+
+    async def update(self, trade: Trade) -> Trade:
+        self.session.add(trade)
+        await self.session.commit()
+        await self.session.refresh(trade)
+        return trade
+
+
+class OrderRepository:
+    """Repository for managing Order records."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, order: Order) -> Order:
+        self.session.add(order)
+        await self.session.commit()
+        await self.session.refresh(order)
+        return order
+
+    async def get_by_client_id(self, client_order_id: str) -> Optional[Order]:
+        stmt = select(Order).where(Order.client_order_id == client_order_id)
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
+    async def get_all(self, limit: int = 50, is_paper: Optional[bool] = None) -> List[Order]:
+        stmt = select(Order).order_by(desc(Order.created_at))
+        if is_paper is not None:
+            stmt = stmt.where(Order.is_paper == is_paper)
+        stmt = stmt.limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
 
 class EquityRepository:
