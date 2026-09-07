@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Header } from './components/Header';
 import { BotControlBar } from './components/BotControlBar';
 import { ActivePositionCard } from './components/ActivePositionCard';
+import { TestnetCard } from './components/TestnetCard';
 import { MetricCards } from './components/MetricCards';
 import { AIPredictionCard } from './components/AIPredictionCard';
 import { MarketOverviewCard } from './components/MarketOverviewCard';
@@ -18,6 +19,8 @@ import {
   type MLPredictionResponse,
   type RiskStatusResponse,
   type StrategyDecisionResponse,
+  type TestnetAccountResponse,
+  type TestnetStatusResponse,
   type TickerResponse,
 } from './services/api';
 import type { AccountSummary, BotStatus, TradeItem, TradeMetrics } from './types/trading';
@@ -35,6 +38,8 @@ export function App() {
   const [strategyDecision, setStrategyDecision] = useState<StrategyDecisionResponse | null>(null);
   const [botDaemon, setBotDaemon] = useState<BotDaemonStatus | null>(null);
   const [activePosition, setActivePosition] = useState<ActivePosition | null>(null);
+  const [testnetStatus, setTestnetStatus] = useState<TestnetStatusResponse | null>(null);
+  const [testnetAccount, setTestnetAccount] = useState<TestnetAccountResponse | null>(null);
   const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [syncingCandles, setSyncingCandles] = useState<boolean>(false);
@@ -64,6 +69,8 @@ export function App() {
         stratRes,
         daemonRes,
         posRes,
+        tnetStatusRes,
+        tnetAccRes,
       ] = await Promise.all([
         apiService.getBotStatus(),
         apiService.getAccountSummary(),
@@ -76,6 +83,8 @@ export function App() {
         apiService.getStrategyDecision(symbol, timeframe).catch(() => null),
         apiService.getBotDaemonStatus().catch(() => null),
         apiService.getActivePosition().catch(() => null),
+        apiService.getTestnetStatus().catch(() => null),
+        apiService.getTestnetAccount().catch(() => null),
       ]);
       setStatus(statusRes);
       setAccount(accountRes);
@@ -88,6 +97,8 @@ export function App() {
       if (stratRes) setStrategyDecision(stratRes);
       if (daemonRes) setBotDaemon(daemonRes);
       if (posRes) setActivePosition(posRes.active_position);
+      if (tnetStatusRes) setTestnetStatus(tnetStatusRes);
+      if (tnetAccRes) setTestnetAccount(tnetAccRes);
       setApiConnected(true);
     } catch (err: any) {
       console.warn('API polling warning:', err);
@@ -276,6 +287,12 @@ export function App() {
           onResetPaper={handleResetPaper}
           closing={closingPosition}
           resetting={resettingPaper}
+        />
+
+        {/* Binance Spot Testnet Gateway */}
+        <TestnetCard
+          testnetStatus={testnetStatus}
+          testnetAccount={testnetAccount}
         />
 
         {/* Risk & Strategy Gatekeeper */}

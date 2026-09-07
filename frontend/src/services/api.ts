@@ -170,6 +170,33 @@ export interface ActivePosition {
   strategy_reason?: string;
 }
 
+export interface TestnetStatusResponse {
+  status: string;
+  testnet: boolean;
+  base_url: string;
+  server_time?: number;
+  latency_ms?: number;
+  api_key_configured: boolean;
+  trading_mode: string;
+  trading_enabled: boolean;
+  live_trading_safety_flag: boolean;
+  error?: string;
+}
+
+export interface TestnetAccountResponse {
+  status: string;
+  message?: string;
+  can_trade?: boolean;
+  can_withdraw?: boolean;
+  account?: {
+    can_trade: boolean;
+    can_withdraw: boolean;
+    account_type: string;
+    security_audit_passed: boolean;
+    balances: Record<string, number>;
+  };
+}
+
 export interface BotDaemonStatus {
   is_running: boolean;
   symbol: string;
@@ -333,6 +360,18 @@ export const apiService = {
       method: 'POST',
     });
     if (!res.ok) throw new Error('Failed to reset paper trading');
+    return res.json();
+  },
+
+  async getTestnetStatus(): Promise<TestnetStatusResponse> {
+    const res = await fetch(`${API_BASE}/testnet/status`);
+    if (!res.ok) throw new Error('Failed to fetch testnet status');
+    return res.json();
+  },
+
+  async getTestnetAccount(): Promise<TestnetAccountResponse> {
+    const res = await fetch(`${API_BASE}/testnet/account`);
+    if (!res.ok) throw new Error('Failed to fetch testnet account');
     return res.json();
   },
 

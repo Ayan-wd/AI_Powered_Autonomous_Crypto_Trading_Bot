@@ -13,6 +13,7 @@ from backend.app.core.config import settings
 from backend.app.core.logging import logger
 from backend.app.database.models import EquitySnapshot, Order, Trade
 from backend.app.database.repositories import EquityRepository, LogRepository, OrderRepository, TradeRepository
+from backend.app.execution.binance_client import BinanceClient
 from backend.app.execution.paper_trading import PaperExchangeSimulator
 from backend.app.risk.risk_manager import risk_manager
 
@@ -20,12 +21,25 @@ from backend.app.risk.risk_manager import risk_manager
 class OrderManager:
     """Master order execution coordinator for paper and live crypto trading."""
 
-    def __init__(self, simulator: Optional[PaperExchangeSimulator] = None):
+    def __init__(
+        self,
+        simulator: Optional[PaperExchangeSimulator] = None,
+        binance_client: Optional[BinanceClient] = None,
+    ):
         self.simulator = simulator or PaperExchangeSimulator(
             starting_capital=settings.STARTING_CAPITAL,
             fee_rate=0.001,  # 0.10%
             slippage_rate=0.0005,  # 0.05%
         )
+        self.binance_client = binance_client or BinanceClient()
+
+    def is_live_or_testnet(self) -> bool:
+        """Check if trading mode is TESTNET or LIVE with safety flags enabled."""
+        if settings.TRADING_MODE == "TESTNET" and settings.TRADING_ENABLED:
+            return bool(settings.BINANCE_API_KEY and settings.BINANCE_API_SECRET)
+        if settings.TRADING_MODE == "LIVE" and settings.LIVE_TRADING and settings.TRADING_ENABLED:
+            return bool(settings.BINANCE_API_KEY and settings.BINANCE_API_SECRET)
+        return False
 
     def get_active_position(self) -> Optional[Dict[str, Any]]:
         """Return active open position metadata if any."""
@@ -44,6 +58,7 @@ class OrderManager:
             "realized_pnl_total": round(self.simulator.realized_pnl_total, 2),
             "total_fees_paid": round(self.simulator.total_fees_paid, 4),
             "has_open_position": self.simulator.active_position is not None,
+            "mode": settings.TRADING_MODE,
         }
 
     async def open_position(
@@ -60,9 +75,30 @@ class OrderManager:
     ) -> Dict[str, Any]:
         """
         Open a new long trading position according to risk parameters.
+        Routes to Binance Testnet if authorized or Paper Simulator.
         Persists Order and Trade records to database.
         """
-        # Execute fill in simulator
+        is_paper = not self.is_live_or_testnet()
+        exchange_order_id = None
+
+        if not is_paper:
+            # Route to Binance Spot Testnet
+            try:
+                raw_qty = position_size_usd / price
+                logger.info(f"Routing live order to Binance Testnet: BUY {symbol} Qty={raw_qty:.6f}")
+                testnet_res = await self.binance_client.place_order(
+                    symbol=symbol,
+                    side="BUY",
+                    order_type="MARKET",
+                    quantity=raw_qty,
+                )
+                exchange_order_id = str(testnet_res.get("orderId"))
+                logger.info(f"Binance Testnet order placed: {exchange_order_id}")
+            except Exception as e:
+                logger.error(f"Binance Testnet order error: {e}. Falling back to paper execution for safety.")
+                is_paper = True
+
+        # Execute fill in simulator (tracks internal state)
         fill_res = self.simulator.execute_market_buy(
             symbol=symbol,
             price=price,
@@ -76,6 +112,9 @@ class OrderManager:
 
         if fill_res.get("status") != "FILLED":
             return fill_res
+
+        fill_res["is_paper"] = is_paper
+        fill_res["exchange_order_id"] = exchange_order_id
 
         # Persist to database if session provided
         if session is not None:

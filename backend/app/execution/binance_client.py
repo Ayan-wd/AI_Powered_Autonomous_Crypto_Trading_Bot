@@ -154,6 +154,52 @@ class BinanceClient(ExchangeInterface):
             timestamp=int(time.time() * 1000),
         )
 
+    async def ping(self) -> bool:
+        """Test connectivity to Binance API."""
+        try:
+            await self._request("GET", "ping")
+            return True
+        except Exception as e:
+            logger.warning(f"Binance ping failed: {e}")
+            return False
+
+    async def get_system_status(self) -> Dict[str, Any]:
+        """Fetch system status and server time."""
+        try:
+            server_time_res = await self._request("GET", "time")
+            server_time = server_time_res.get("serverTime")
+            return {
+                "status": "ONLINE",
+                "testnet": self.testnet,
+                "base_url": self.base_url,
+                "server_time": server_time,
+                "latency_ms": int(time.time() * 1000) - int(server_time) if server_time else 0,
+            }
+        except Exception as e:
+            return {
+                "status": "OFFLINE",
+                "testnet": self.testnet,
+                "base_url": self.base_url,
+                "error": str(e),
+            }
+
+    async def get_account_info(self) -> Dict[str, Any]:
+        """Fetch raw account details with security permission verification (Signed)."""
+        data = await self._request("GET", "account", signed=True)
+        return {
+            "maker_commission": data.get("makerCommission", 0),
+            "taker_commission": data.get("takerCommission", 0),
+            "can_trade": data.get("canTrade", False),
+            "can_withdraw": data.get("canWithdraw", False),  # Must be False for bot API keys!
+            "can_deposit": data.get("canDeposit", False),
+            "account_type": data.get("accountType", "SPOT"),
+            "balances": {
+                b["asset"]: float(b["free"]) + float(b["locked"])
+                for b in data.get("balances", [])
+                if float(b["free"]) + float(b["locked"]) > 0.0
+            },
+        }
+
     async def get_account_balance(self) -> Dict[str, float]:
         """Fetch account balances (Signed)."""
         data = await self._request("GET", "account", signed=True)
