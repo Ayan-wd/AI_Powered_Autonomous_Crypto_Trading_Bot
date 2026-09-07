@@ -5,7 +5,7 @@ import { AIPredictionCard } from './components/AIPredictionCard';
 import { MarketOverviewCard } from './components/MarketOverviewCard';
 import { TradesTable } from './components/TradesTable';
 import { EquityChart } from './components/EquityChart';
-import { apiService, type TickerResponse } from './services/api';
+import { apiService, type FeaturesResponse, type TickerResponse } from './services/api';
 import type { AccountSummary, BotStatus, TradeItem, TradeMetrics } from './types/trading';
 import { AlertCircle, Terminal } from 'lucide-react';
 
@@ -15,6 +15,7 @@ export function App() {
   const [trades, setTrades] = useState<TradeItem[]>([]);
   const [metrics, setMetrics] = useState<TradeMetrics | null>(null);
   const [ticker, setTicker] = useState<TickerResponse | null>(null);
+  const [features, setFeatures] = useState<FeaturesResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [syncingCandles, setSyncingCandles] = useState<boolean>(false);
   const [apiConnected, setApiConnected] = useState<boolean>(false);
@@ -22,18 +23,23 @@ export function App() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [statusRes, accountRes, tradesRes, metricsRes, tickerRes] = await Promise.all([
+      const symbol = status?.symbol || 'BTCUSDT';
+      const timeframe = status?.timeframe || '15m';
+
+      const [statusRes, accountRes, tradesRes, metricsRes, tickerRes, featuresRes] = await Promise.all([
         apiService.getBotStatus(),
         apiService.getAccountSummary(),
         apiService.getTrades(50),
         apiService.getTradeMetrics(),
-        apiService.getTicker(status?.symbol || 'BTCUSDT').catch(() => null),
+        apiService.getTicker(symbol).catch(() => null),
+        apiService.getLatestFeatures(symbol, timeframe).catch(() => null),
       ]);
       setStatus(statusRes);
       setAccount(accountRes);
       setTrades(tradesRes);
       setMetrics(metricsRes);
       if (tickerRes) setTicker(tickerRes);
+      if (featuresRes && featuresRes.status === 'OK') setFeatures(featuresRes);
       setApiConnected(true);
     } catch (err: any) {
       console.warn('API polling warning:', err);
@@ -116,6 +122,7 @@ export function App() {
           <MarketOverviewCard
             symbol={status?.symbol || 'BTCUSDT'}
             ticker={ticker}
+            features={features}
             onSyncCandles={handleSyncCandles}
             syncing={syncingCandles}
           />

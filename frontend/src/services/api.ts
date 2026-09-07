@@ -27,6 +27,42 @@ export interface CandleResponse {
   is_closed: boolean;
 }
 
+export interface FeaturesResponse {
+  status: string;
+  symbol: string;
+  timeframe: string;
+  timestamp: string;
+  price: number;
+  rsi_14: number;
+  macd: {
+    value: number;
+    signal: number;
+    hist: number;
+  };
+  ema: {
+    ema20: number;
+    ema50: number;
+    ema200: number;
+  };
+  bollinger: {
+    upper: number;
+    middle: number;
+    lower: number;
+    width: number;
+  };
+  atr_14: number;
+  returns: {
+    return_1p: number;
+    return_3p: number;
+    return_5p: number;
+  };
+  regimes: {
+    trend: 'BULLISH' | 'BEARISH' | 'RANGING';
+    volatility: 'HIGH' | 'LOW' | 'NORMAL';
+  };
+  message?: string;
+}
+
 export const apiService = {
   async getHealth(): Promise<HealthResponse> {
     const res = await fetch(`${API_BASE}/health`);
@@ -75,6 +111,12 @@ export const apiService = {
       method: 'POST',
     });
     if (!res.ok) throw new Error('Failed to sync candles');
+    return res.json();
+  },
+
+  async getLatestFeatures(symbol = 'BTCUSDT', timeframe = '15m'): Promise<FeaturesResponse> {
+    const res = await fetch(`${API_BASE}/features/latest?symbol=${symbol}&timeframe=${timeframe}`);
+    if (!res.ok) throw new Error('Failed to fetch features');
     return res.json();
   },
 

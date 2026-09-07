@@ -1,15 +1,11 @@
 import React from 'react';
 import { BarChart3, RefreshCw } from 'lucide-react';
-import type { TickerResponse } from '../services/api';
+import type { FeaturesResponse, TickerResponse } from '../services/api';
 
 interface MarketOverviewProps {
   symbol?: string;
   ticker?: TickerResponse | null;
-  rsi?: number;
-  macd?: { value: number; signal: number; hist: number };
-  ema?: { ema20: number; ema50: number; ema200: number };
-  atr?: number;
-  volatilityRegime?: string;
+  features?: FeaturesResponse | null;
   onSyncCandles?: () => void;
   syncing?: boolean;
 }
@@ -17,21 +13,22 @@ interface MarketOverviewProps {
 export const MarketOverviewCard: React.FC<MarketOverviewProps> = ({
   symbol = 'BTCUSDT',
   ticker,
-  rsi = 52.8,
-  macd = { value: 112.4, signal: 98.2, hist: 14.2 },
-  ema,
-  atr = 450.2,
-  volatilityRegime = 'NORMAL',
+  features,
   onSyncCandles,
   syncing = false,
 }) => {
-  const price = ticker?.price ?? 91845.20;
+  const price = features?.price ?? ticker?.price ?? 91845.20;
   const change24h = ticker?.price_change_24h_pct ?? 1.42;
-  const displayEma = ema ?? {
-    ema20: price * 0.998,
-    ema50: price * 0.994,
-    ema200: price * 0.975,
-  };
+
+  const rsi = features?.rsi_14 ?? 52.8;
+  const macdHist = features?.macd?.hist ?? 14.2;
+  const atr = features?.atr_14 ?? 450.2;
+  const volRegime = features?.regimes?.volatility ?? 'NORMAL';
+  const trendRegime = features?.regimes?.trend ?? 'BULLISH';
+
+  const ema20 = features?.ema?.ema20 ?? price * 0.998;
+  const ema50 = features?.ema?.ema50 ?? price * 0.994;
+  const ema200 = features?.ema?.ema200 ?? price * 0.975;
 
   return (
     <div className="p-5 rounded-xl bg-slate-900/70 border border-slate-800 backdrop-blur">
@@ -47,7 +44,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewProps> = ({
                 <button
                   onClick={onSyncCandles}
                   disabled={syncing}
-                  className="px-2 py-0.5 text-[10px] font-medium text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-700/50 rounded flex items-center gap-1 transition"
+                  className="px-2 py-0.5 text-[10px] font-medium text-emerald-300 bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-700/50 rounded flex items-center gap-1 transition cursor-pointer"
                   title="Ingest historical candles from Binance into DB"
                 >
                   <RefreshCw className={`w-2.5 h-2.5 ${syncing ? 'animate-spin' : ''}`} />
@@ -84,8 +81,8 @@ export const MarketOverviewCard: React.FC<MarketOverviewProps> = ({
 
         <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
           <span className="text-[11px] text-slate-400 block mb-0.5">MACD Hist</span>
-          <span className={`text-sm font-bold font-mono ${macd.hist >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {macd.hist >= 0 ? '+' : ''}{macd.hist.toFixed(1)}
+          <span className={`text-sm font-bold font-mono ${macdHist >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {macdHist >= 0 ? '+' : ''}{macdHist.toFixed(1)}
           </span>
         </div>
 
@@ -96,7 +93,7 @@ export const MarketOverviewCard: React.FC<MarketOverviewProps> = ({
 
         <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80">
           <span className="text-[11px] text-slate-400 block mb-0.5">Volatility</span>
-          <span className="text-xs font-bold text-cyan-300 font-mono uppercase">{volatilityRegime}</span>
+          <span className="text-xs font-bold text-cyan-300 font-mono uppercase">{volRegime}</span>
         </div>
       </div>
 
@@ -104,20 +101,28 @@ export const MarketOverviewCard: React.FC<MarketOverviewProps> = ({
       <div className="p-3 rounded-lg bg-slate-950/40 border border-slate-800/80">
         <div className="text-[11px] font-semibold text-slate-400 mb-2 flex items-center justify-between">
           <span>EMA Trend Structure</span>
-          <span className="text-emerald-400 font-mono text-[10px]">EMA20 &gt; EMA50 &gt; EMA200 (BULLISH ALIGNMENT)</span>
+          <span className={`font-mono text-[10px] font-bold ${
+            trendRegime === 'BULLISH' ? 'text-emerald-400' : trendRegime === 'BEARISH' ? 'text-rose-400' : 'text-amber-400'
+          }`}>
+            {trendRegime === 'BULLISH'
+              ? 'EMA20 > EMA50 > EMA200 (BULLISH)'
+              : trendRegime === 'BEARISH'
+              ? 'EMA20 < EMA50 < EMA200 (BEARISH)'
+              : 'MIXED / RANGING'}
+          </span>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
           <div className="bg-slate-900/80 py-1 px-2 rounded border border-slate-800">
             <span className="text-slate-400 text-[10px] block">EMA 20</span>
-            <span className="text-indigo-300 font-semibold">${displayEma.ema20.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+            <span className="text-indigo-300 font-semibold">${ema20.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
           </div>
           <div className="bg-slate-900/80 py-1 px-2 rounded border border-slate-800">
             <span className="text-slate-400 text-[10px] block">EMA 50</span>
-            <span className="text-indigo-300 font-semibold">${displayEma.ema50.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+            <span className="text-indigo-300 font-semibold">${ema50.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
           </div>
           <div className="bg-slate-900/80 py-1 px-2 rounded border border-slate-800">
             <span className="text-slate-400 text-[10px] block">EMA 200</span>
-            <span className="text-indigo-300 font-semibold">${displayEma.ema200.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
+            <span className="text-indigo-300 font-semibold">${ema200.toLocaleString(undefined, { maximumFractionDigits: 1 })}</span>
           </div>
         </div>
       </div>
