@@ -5,7 +5,7 @@ import { AIPredictionCard } from './components/AIPredictionCard';
 import { MarketOverviewCard } from './components/MarketOverviewCard';
 import { TradesTable } from './components/TradesTable';
 import { EquityChart } from './components/EquityChart';
-import { apiService, type FeaturesResponse, type TickerResponse } from './services/api';
+import { apiService, type FeaturesResponse, type MLPredictionResponse, type TickerResponse } from './services/api';
 import type { AccountSummary, BotStatus, TradeItem, TradeMetrics } from './types/trading';
 import { AlertCircle, Terminal } from 'lucide-react';
 
@@ -16,8 +16,10 @@ export function App() {
   const [metrics, setMetrics] = useState<TradeMetrics | null>(null);
   const [ticker, setTicker] = useState<TickerResponse | null>(null);
   const [features, setFeatures] = useState<FeaturesResponse | null>(null);
+  const [prediction, setPrediction] = useState<MLPredictionResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [syncingCandles, setSyncingCandles] = useState<boolean>(false);
+  const [trainingModel, setTrainingModel] = useState<boolean>(false);
   const [apiConnected, setApiConnected] = useState<boolean>(false);
 
   const fetchData = async () => {
@@ -26,13 +28,14 @@ export function App() {
       const symbol = status?.symbol || 'BTCUSDT';
       const timeframe = status?.timeframe || '15m';
 
-      const [statusRes, accountRes, tradesRes, metricsRes, tickerRes, featuresRes] = await Promise.all([
+      const [statusRes, accountRes, tradesRes, metricsRes, tickerRes, featuresRes, predRes] = await Promise.all([
         apiService.getBotStatus(),
         apiService.getAccountSummary(),
         apiService.getTrades(50),
         apiService.getTradeMetrics(),
         apiService.getTicker(symbol).catch(() => null),
         apiService.getLatestFeatures(symbol, timeframe).catch(() => null),
+        apiService.getMLPrediction(symbol, timeframe).catch(() => null),
       ]);
       setStatus(statusRes);
       setAccount(accountRes);
@@ -40,6 +43,7 @@ export function App() {
       setMetrics(metricsRes);
       if (tickerRes) setTicker(tickerRes);
       if (featuresRes && featuresRes.status === 'OK') setFeatures(featuresRes);
+      if (predRes && predRes.status === 'OK') setPrediction(predRes);
       setApiConnected(true);
     } catch (err: any) {
       console.warn('API polling warning:', err);
@@ -65,6 +69,23 @@ export function App() {
       alert('Candle Sync Error: ' + e.message);
     } finally {
       setSyncingCandles(false);
+    }
+  };
+
+  const handleTrainModel = async () => {
+    try {
+      setTrainingModel(true);
+      const res = await apiService.trainModel(status?.symbol || 'BTCUSDT', status?.timeframe || '15m', 500);
+      if (res.status === 'TRAINING_COMPLETE') {
+        alert(`Model Training Complete! Version: ${res.model_version}\nAverage Walk-Forward Accuracy: ${(res.average_val_accuracy * 100).toFixed(1)}%`);
+      } else {
+        alert(`Model Training: ${res.message || res.status}`);
+      }
+      await fetchData();
+    } catch (e: any) {
+      alert('Training Error: ' + e.message);
+    } finally {
+      setTrainingModel(false);
     }
   };
 
@@ -117,7 +138,9 @@ export function App() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <AIPredictionCard
             symbol={status?.symbol || 'BTC/USDT'}
-            decision={status?.last_signal || 'HOLD / NO TRADE'}
+            prediction={prediction}
+            onTrainModel={handleTrainModel}
+            training={trainingModel}
           />
           <MarketOverviewCard
             symbol={status?.symbol || 'BTCUSDT'}

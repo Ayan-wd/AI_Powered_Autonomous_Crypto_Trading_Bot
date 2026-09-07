@@ -63,6 +63,25 @@ export interface FeaturesResponse {
   message?: string;
 }
 
+export interface MLPredictionResponse {
+  status: string;
+  symbol: string;
+  timestamp: string;
+  decision: 'BUY' | 'SELL' | 'HOLD / NO TRADE';
+  probabilities: {
+    buy: number;
+    sell: number;
+    hold: number;
+  };
+  confidence: number;
+  confidence_threshold: number;
+  expected_return_pct: number;
+  model_version: string;
+  reasoning: string[];
+  features_snapshot?: Record<string, number>;
+  message?: string;
+}
+
 export const apiService = {
   async getHealth(): Promise<HealthResponse> {
     const res = await fetch(`${API_BASE}/health`);
@@ -117,6 +136,20 @@ export const apiService = {
   async getLatestFeatures(symbol = 'BTCUSDT', timeframe = '15m'): Promise<FeaturesResponse> {
     const res = await fetch(`${API_BASE}/features/latest?symbol=${symbol}&timeframe=${timeframe}`);
     if (!res.ok) throw new Error('Failed to fetch features');
+    return res.json();
+  },
+
+  async getMLPrediction(symbol = 'BTCUSDT', timeframe = '15m'): Promise<MLPredictionResponse> {
+    const res = await fetch(`${API_BASE}/ml/predict?symbol=${symbol}&timeframe=${timeframe}`);
+    if (!res.ok) throw new Error('Failed to fetch ML prediction');
+    return res.json();
+  },
+
+  async trainModel(symbol = 'BTCUSDT', timeframe = '15m', limitCandles = 500): Promise<any> {
+    const res = await fetch(`${API_BASE}/ml/train?symbol=${symbol}&timeframe=${timeframe}&limit_candles=${limitCandles}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to train model');
     return res.json();
   },
 

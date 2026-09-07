@@ -1,30 +1,31 @@
 import React from 'react';
-import { BrainCircuit, CheckCircle2 } from 'lucide-react';
+import { BrainCircuit, CheckCircle2, RefreshCw } from 'lucide-react';
+import type { MLPredictionResponse } from '../services/api';
 
 interface AIPredictionProps {
   symbol?: string;
-  probabilities?: {
-    buy: number;
-    sell: number;
-    hold: number;
-  };
-  decision?: string;
-  confidence?: number;
-  reasoning?: string[];
+  prediction?: MLPredictionResponse | null;
+  onTrainModel?: () => void;
+  training?: boolean;
 }
 
 export const AIPredictionCard: React.FC<AIPredictionProps> = ({
   symbol = 'BTC/USDT',
-  probabilities = { buy: 0.18, sell: 0.12, hold: 0.70 },
-  decision = 'HOLD / NO TRADE',
-  confidence = 0.72,
-  reasoning = [
+  prediction,
+  onTrainModel,
+  training = false,
+}) => {
+  const probabilities = prediction?.probabilities ?? { buy: 0.18, sell: 0.12, hold: 0.70 };
+  const decision = prediction?.decision ?? 'HOLD / NO TRADE';
+  const confidence = prediction?.confidence ?? 0.72;
+  const modelVersion = prediction?.model_version ?? 'XGBoost v1.0';
+  const reasoning = prediction?.reasoning ?? [
     'RSI (51.4) in neutral zone, no extreme momentum trigger',
     'Price oscillating between EMA20 and EMA50 (Ranging regime)',
     'Expected return (0.18%) is below hurdle rate (0.50% target)',
     'Capital preservation rule: strictly avoiding forced trades in low volatility',
-  ],
-}) => {
+  ];
+
   const buyPct = Math.round(probabilities.buy * 100);
   const sellPct = Math.round(probabilities.sell * 100);
   const holdPct = Math.round(probabilities.hold * 100);
@@ -40,8 +41,21 @@ export const AIPredictionCard: React.FC<AIPredictionProps> = ({
             <BrainCircuit className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white">AI Quantitative Signal Engine</h3>
-            <p className="text-xs text-slate-400 font-mono">XGBoost Horizon 4-Candle Estimator</p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-white">AI Quantitative Signal Engine</h3>
+              {onTrainModel && (
+                <button
+                  onClick={onTrainModel}
+                  disabled={training}
+                  className="px-2 py-0.5 text-[10px] font-medium text-indigo-300 bg-indigo-950/60 hover:bg-indigo-900 border border-indigo-700/50 rounded flex items-center gap-1 transition cursor-pointer"
+                  title="Run Walk-Forward XGBoost Model Training"
+                >
+                  <RefreshCw className={`w-2.5 h-2.5 ${training ? 'animate-spin' : ''}`} />
+                  <span>{training ? 'Training...' : 'Train ML'}</span>
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-slate-400 font-mono">{modelVersion}</p>
           </div>
         </div>
 
