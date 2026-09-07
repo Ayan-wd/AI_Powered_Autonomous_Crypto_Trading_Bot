@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Secrets & Environment Variables (CRITICAL: NEVER COMMIT)
+.env
+.env.local
+.env.*.local
+*.key
+*.secret
+*.pem
+secrets/
+
+# Databases
+*.sqlite
+*.sqlite3
+*.db
+data/trading_bot.db
+data/trading_bot_test.db
+data/private/*
+
+# Machine Learning Artifacts & Private Models
+models/private/*
+models/*.joblib
+models/*.json
+models/*.bin
+!models/.gitkeep
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/coverage/
+.npm
+*.tsbuildinfo
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs & Testing
+*.log
+logs/
+.pytest_cache/
+.coverage
+htmlcov/
