@@ -82,6 +82,24 @@ export interface MLPredictionResponse {
   message?: string;
 }
 
+export interface BenchmarkResponse {
+  status: string;
+  symbol: string;
+  timeframe: string;
+  candle_count: number;
+  starting_capital: number;
+  strategies: {
+    buy_and_hold: Record<string, any>;
+    technical_cross: Record<string, any>;
+    ai_multi_factor: Record<string, any>;
+  };
+  comparison: {
+    best_return_strategy: string;
+    lowest_drawdown_strategy: string;
+  };
+  message?: string;
+}
+
 export const apiService = {
   async getHealth(): Promise<HealthResponse> {
     const res = await fetch(`${API_BASE}/health`);
@@ -150,6 +168,14 @@ export const apiService = {
       method: 'POST',
     });
     if (!res.ok) throw new Error('Failed to train model');
+    return res.json();
+  },
+
+  async runBenchmark(symbol = 'BTCUSDT', timeframe = '15m', limitCandles = 300): Promise<BenchmarkResponse> {
+    const res = await fetch(`${API_BASE}/backtest/benchmark?symbol=${symbol}&timeframe=${timeframe}&limit_candles=${limitCandles}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Failed to run benchmark');
     return res.json();
   },
 

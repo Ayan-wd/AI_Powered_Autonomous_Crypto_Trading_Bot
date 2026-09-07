@@ -3,9 +3,10 @@ import { Header } from './components/Header';
 import { MetricCards } from './components/MetricCards';
 import { AIPredictionCard } from './components/AIPredictionCard';
 import { MarketOverviewCard } from './components/MarketOverviewCard';
+import { BenchmarkCard } from './components/BenchmarkCard';
 import { TradesTable } from './components/TradesTable';
 import { EquityChart } from './components/EquityChart';
-import { apiService, type FeaturesResponse, type MLPredictionResponse, type TickerResponse } from './services/api';
+import { apiService, type BenchmarkResponse, type FeaturesResponse, type MLPredictionResponse, type TickerResponse } from './services/api';
 import type { AccountSummary, BotStatus, TradeItem, TradeMetrics } from './types/trading';
 import { AlertCircle, Terminal } from 'lucide-react';
 
@@ -17,9 +18,11 @@ export function App() {
   const [ticker, setTicker] = useState<TickerResponse | null>(null);
   const [features, setFeatures] = useState<FeaturesResponse | null>(null);
   const [prediction, setPrediction] = useState<MLPredictionResponse | null>(null);
+  const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [syncingCandles, setSyncingCandles] = useState<boolean>(false);
   const [trainingModel, setTrainingModel] = useState<boolean>(false);
+  const [runningBenchmark, setRunningBenchmark] = useState<boolean>(false);
   const [apiConnected, setApiConnected] = useState<boolean>(false);
 
   const fetchData = async () => {
@@ -89,6 +92,22 @@ export function App() {
     }
   };
 
+  const handleRunBenchmark = async () => {
+    try {
+      setRunningBenchmark(true);
+      const res = await apiService.runBenchmark(status?.symbol || 'BTCUSDT', status?.timeframe || '15m', 300);
+      if (res.status === 'SUCCESS') {
+        setBenchmark(res);
+      } else {
+        alert(`Benchmark Notice: ${res.message}`);
+      }
+    } catch (e: any) {
+      alert('Benchmark Error: ' + e.message);
+    } finally {
+      setRunningBenchmark(false);
+    }
+  };
+
   const handleKillSwitch = async () => {
     try {
       await apiService.triggerKillSwitch();
@@ -150,6 +169,13 @@ export function App() {
             syncing={syncingCandles}
           />
         </div>
+
+        {/* 3-Way Strategy Benchmark Comparator */}
+        <BenchmarkCard
+          benchmark={benchmark}
+          onRunBenchmark={handleRunBenchmark}
+          loading={runningBenchmark}
+        />
 
         {/* Equity Curve Tracker */}
         <EquityChart
