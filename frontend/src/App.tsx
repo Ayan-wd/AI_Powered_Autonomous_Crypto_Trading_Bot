@@ -3,10 +3,19 @@ import { Header } from './components/Header';
 import { MetricCards } from './components/MetricCards';
 import { AIPredictionCard } from './components/AIPredictionCard';
 import { MarketOverviewCard } from './components/MarketOverviewCard';
+import { RiskStrategyCard } from './components/RiskStrategyCard';
 import { BenchmarkCard } from './components/BenchmarkCard';
 import { TradesTable } from './components/TradesTable';
 import { EquityChart } from './components/EquityChart';
-import { apiService, type BenchmarkResponse, type FeaturesResponse, type MLPredictionResponse, type TickerResponse } from './services/api';
+import {
+  apiService,
+  type BenchmarkResponse,
+  type FeaturesResponse,
+  type MLPredictionResponse,
+  type RiskStatusResponse,
+  type StrategyDecisionResponse,
+  type TickerResponse,
+} from './services/api';
 import type { AccountSummary, BotStatus, TradeItem, TradeMetrics } from './types/trading';
 import { AlertCircle, Terminal } from 'lucide-react';
 
@@ -18,10 +27,13 @@ export function App() {
   const [ticker, setTicker] = useState<TickerResponse | null>(null);
   const [features, setFeatures] = useState<FeaturesResponse | null>(null);
   const [prediction, setPrediction] = useState<MLPredictionResponse | null>(null);
+  const [riskStatus, setRiskStatus] = useState<RiskStatusResponse | null>(null);
+  const [strategyDecision, setStrategyDecision] = useState<StrategyDecisionResponse | null>(null);
   const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [syncingCandles, setSyncingCandles] = useState<boolean>(false);
   const [trainingModel, setTrainingModel] = useState<boolean>(false);
+  const [evaluatingStrategy, setEvaluatingStrategy] = useState<boolean>(false);
   const [runningBenchmark, setRunningBenchmark] = useState<boolean>(false);
   const [apiConnected, setApiConnected] = useState<boolean>(false);
 
@@ -31,15 +43,18 @@ export function App() {
       const symbol = status?.symbol || 'BTCUSDT';
       const timeframe = status?.timeframe || '15m';
 
-      const [statusRes, accountRes, tradesRes, metricsRes, tickerRes, featuresRes, predRes] = await Promise.all([
-        apiService.getBotStatus(),
-        apiService.getAccountSummary(),
-        apiService.getTrades(50),
-        apiService.getTradeMetrics(),
-        apiService.getTicker(symbol).catch(() => null),
-        apiService.getLatestFeatures(symbol, timeframe).catch(() => null),
-        apiService.getMLPrediction(symbol, timeframe).catch(() => null),
-      ]);
+      const [statusRes, accountRes, tradesRes, metricsRes, tickerRes, featuresRes, predRes, riskRes, stratRes] =
+        await Promise.all([
+          apiService.getBotStatus(),
+          apiService.getAccountSummary(),
+          apiService.getTrades(50),
+          apiService.getTradeMetrics(),
+          apiService.getTicker(symbol).catch(() => null),
+          apiService.getLatestFeatures(symbol, timeframe).catch(() => null),
+          apiService.getMLPrediction(symbol, timeframe).catch(() => null),
+          apiService.getRiskStatus().catch(() => null),
+          apiService.getStrategyDecision(symbol, timeframe).catch(() => null),
+        ]);
       setStatus(statusRes);
       setAccount(accountRes);
       setTrades(tradesRes);
@@ -47,6 +62,8 @@ export function App() {
       if (tickerRes) setTicker(tickerRes);
       if (featuresRes && featuresRes.status === 'OK') setFeatures(featuresRes);
       if (predRes && predRes.status === 'OK') setPrediction(predRes);
+      if (riskRes) setRiskStatus(riskRes);
+      if (stratRes) setStrategyDecision(stratRes);
       setApiConnected(true);
     } catch (err: any) {
       console.warn('API polling warning:', err);
@@ -89,6 +106,20 @@ export function App() {
       alert('Training Error: ' + e.message);
     } finally {
       setTrainingModel(false);
+    }
+  };
+
+  const handleEvaluateStrategy = async () => {
+    try {
+      setEvaluatingStrategy(true);
+      const res = await apiService.getStrategyDecision(status?.symbol || 'BTCUSDT', status?.timeframe || '15m');
+      setStrategyDecision(res);
+      const risk = await apiService.getRiskStatus();
+      setRiskStatus(risk);
+    } catch (e: any) {
+      alert('Strategy Evaluation Error: ' + e.message);
+    } finally {
+      setEvaluatingStrategy(false);
     }
   };
 
@@ -152,6 +183,14 @@ export function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
         {/* Metric Cards Banner */}
         <MetricCards account={account} metrics={metrics} />
+
+        {/* Risk & Strategy Gatekeeper */}
+        <RiskStrategyCard
+          riskStatus={riskStatus}
+          strategyDecision={strategyDecision}
+          onEvaluateStrategy={handleEvaluateStrategy}
+          loading={evaluatingStrategy}
+        />
 
         {/* Middle Two-Column Grid: AI Prediction + Market Analysis */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -100,6 +100,57 @@ export interface BenchmarkResponse {
   message?: string;
 }
 
+export interface RiskStatusResponse {
+  trading_permitted: boolean;
+  denial_reason: string | null;
+  current_equity: number;
+  high_water_mark: number;
+  drawdown_pct: number;
+  max_drawdown_limit_pct: number;
+  daily_loss_usd: number;
+  daily_loss_pct: number;
+  max_daily_loss_limit_pct: number;
+  weekly_loss_usd: number;
+  consecutive_losses: number;
+  max_consecutive_losses_limit: number;
+  daily_trades_count: number;
+  max_daily_trades: number;
+  circuit_breaker_active: boolean;
+  max_risk_per_trade_pct: number;
+  max_position_size_usd: number;
+  starting_capital: number;
+}
+
+export interface StrategyDecisionResponse {
+  action: 'BUY' | 'SELL' | 'HOLD / NO TRADE';
+  reason: string;
+  confidence: number;
+  order_details: {
+    side: 'BUY' | 'SELL';
+    entry_price: number;
+    stop_loss: number;
+    take_profit: number;
+    position_size_usd: number;
+    quantity: number;
+    risk_amount_usd: number;
+    risk_pct: number;
+    risk_reward_ratio: number;
+  } | null;
+  ml_probabilities?: {
+    buy: number;
+    sell: number;
+    hold: number;
+  };
+  regime?: {
+    trend: string;
+    volatility: string;
+  };
+  numerical_explanation: string[];
+  symbol?: string;
+  timeframe?: string;
+  account_equity?: number;
+}
+
 export const apiService = {
   async getHealth(): Promise<HealthResponse> {
     const res = await fetch(`${API_BASE}/health`);
@@ -188,6 +239,18 @@ export const apiService = {
   async resetKillSwitch(): Promise<{ status: string; bot_state: string }> {
     const res = await fetch(`${API_BASE}/status/reset-kill-switch`, { method: 'POST' });
     if (!res.ok) throw new Error('Failed to reset kill switch');
+    return res.json();
+  },
+
+  async getRiskStatus(): Promise<RiskStatusResponse> {
+    const res = await fetch(`${API_BASE}/risk/status`);
+    if (!res.ok) throw new Error('Failed to fetch risk status');
+    return res.json();
+  },
+
+  async getStrategyDecision(symbol = 'BTCUSDT', timeframe = '15m'): Promise<StrategyDecisionResponse> {
+    const res = await fetch(`${API_BASE}/strategy/decision?symbol=${symbol}&timeframe=${timeframe}`);
+    if (!res.ok) throw new Error('Failed to fetch strategy decision');
     return res.json();
   },
 
