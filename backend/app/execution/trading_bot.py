@@ -8,6 +8,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 import json
+import httpx
 
 from backend.app.api.websocket.ws_manager import ws_manager
 from backend.app.core.config import settings
@@ -102,6 +103,8 @@ class TradingBotEngine:
                 await self._tick()
             except asyncio.CancelledError:
                 break
+            except (httpx.RequestError, httpx.TimeoutException) as e:
+                logger.warning(f"Market connection transient timeout during tick: {e}. Retrying next tick...")
             except Exception as e:
                 logger.error(f"Error in trading bot tick loop: {e}", exc_info=True)
 
