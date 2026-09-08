@@ -13,7 +13,7 @@ from backend.app.core.logging import logger
 from backend.app.data.data_validator import MarketDataValidator
 from backend.app.database.models import Candle
 from backend.app.execution.binance_client import BinanceClient
-from backend.app.execution.exchange_interface import ExchangeInterface
+from backend.app.execution.exchange_interface import ExchangeInterface, TickerData
 
 
 class MarketDataEngine:
@@ -21,6 +21,11 @@ class MarketDataEngine:
 
     def __init__(self, exchange_client: Optional[ExchangeInterface] = None):
         self.client = exchange_client or BinanceClient()
+
+    async def get_live_ticker(self, symbol: str) -> TickerData:
+        """Fetch real-time ticker data from exchange adapter."""
+        await self.client.initialize()
+        return await self.client.get_ticker(symbol)
 
     async def fetch_and_store_historical_candles(
         self,

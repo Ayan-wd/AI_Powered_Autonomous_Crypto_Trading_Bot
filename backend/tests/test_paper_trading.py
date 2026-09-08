@@ -159,3 +159,36 @@ async def test_trading_bot_engine_start_stop():
     stop_res = await bot.stop()
     assert stop_res["status"] == "STOPPED"
     assert bot.is_running is False
+
+
+@pytest.mark.asyncio
+async def test_market_data_engine_get_live_ticker(monkeypatch):
+    """Test get_live_ticker returns valid TickerData from exchange client."""
+    from backend.app.data.market_data import MarketDataEngine
+    from backend.app.execution.exchange_interface import TickerData
+
+    mock_ticker = TickerData(
+        symbol="BTCUSDT",
+        price=65000.0,
+        bid_price=64995.0,
+        ask_price=65005.0,
+        volume_24h=1200.0,
+        price_change_24h_pct=2.5,
+        timestamp=1700000000000,
+    )
+
+    engine = MarketDataEngine()
+    async def mock_get_ticker(symbol: str):
+        return mock_ticker
+
+    async def mock_init():
+        pass
+
+    monkeypatch.setattr(engine.client, "initialize", mock_init)
+    monkeypatch.setattr(engine.client, "get_ticker", mock_get_ticker)
+
+    result = await engine.get_live_ticker("BTCUSDT")
+    assert result.symbol == "BTCUSDT"
+    assert result.price == 65000.0
+    assert result.bid_price == 64995.0
+
