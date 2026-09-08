@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, ShieldAlert, Activity, RefreshCw } from 'lucide-react';
+import { Shield, ShieldAlert, Activity, RefreshCw, Menu } from 'lucide-react';
 import type { BotStatus } from '../types/trading';
 
 interface HeaderProps {
@@ -10,6 +10,8 @@ interface HeaderProps {
   loading: boolean;
   wsConnected?: boolean;
   isDaemonRunning?: boolean;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -20,75 +22,86 @@ export const Header: React.FC<HeaderProps> = ({
   loading,
   wsConnected = false,
   isDaemonRunning = false,
+  onToggleSidebar,
 }) => {
   const isEmergency = status?.kill_switch_active;
   const mode = status?.trading_mode || 'PAPER';
   const isRunning = isDaemonRunning || status?.bot_state === 'RUNNING';
 
   return (
-    <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-50">
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-emerald-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-            <Activity className="w-5 h-5 text-white" />
+    <header className="border-b border-zinc-800 bg-black/90 backdrop-blur-md px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-40">
+      <div className="flex items-center space-x-3 sm:space-x-4">
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+            title="Toggle Sidebar"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+
+        <div className="flex items-center space-x-2.5">
+          <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.2)]">
+            <Activity className="w-4 h-4 text-black stroke-[2.5]" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-white tracking-wide">QUANTUM AI</h1>
-            <p className="text-xs text-slate-400 font-mono">Autonomous Spot Engine v0.1.0</p>
+            <h1 className="text-base sm:text-lg font-black text-white tracking-wider">QUANTUM AI</h1>
+            <p className="text-[11px] text-zinc-400 font-mono">Spot Trading Terminal</p>
           </div>
         </div>
 
-        {/* Trading Mode Badge */}
-        <div className="flex items-center gap-2 pl-4 border-l border-slate-800">
+        {/* Badges */}
+        <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-zinc-800">
           <span
-            className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${
+            className={`px-2.5 py-0.5 text-xs font-mono font-bold rounded border ${
               mode === 'LIVE'
                 ? 'bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse'
                 : mode === 'TESTNET'
-                ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                ? 'bg-zinc-800 text-white border-zinc-700'
+                : 'bg-zinc-900 text-zinc-300 border-zinc-800'
             }`}
           >
             MODE: {mode}
           </span>
 
           <span
-            className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${
+            className={`px-2.5 py-0.5 text-xs font-mono font-bold rounded border ${
               isEmergency
                 ? 'bg-rose-500/20 text-rose-300 border-rose-500'
                 : isRunning
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                : 'bg-slate-700/50 text-slate-400 border-slate-700'
+                ? 'bg-white text-black border-white'
+                : 'bg-zinc-900 text-zinc-500 border-zinc-800'
             }`}
           >
-            {isEmergency ? 'EMERGENCY HALT' : isRunning ? 'ACTIVE' : 'STOPPED'}
+            {isEmergency ? 'EMERGENCY HALT' : isRunning ? 'DAEMON ACTIVE' : 'STOPPED'}
           </span>
 
           <span
-            className={`px-2 py-0.5 text-[11px] font-mono font-medium rounded-full border flex items-center gap-1 ${
+            className={`px-2 py-0.5 text-[11px] font-mono font-medium rounded border flex items-center gap-1.5 ${
               wsConnected
-                ? 'bg-emerald-950/60 text-emerald-400 border-emerald-700/60'
-                : 'bg-slate-800 text-slate-400 border-slate-700'
+                ? 'bg-zinc-900 text-zinc-200 border-zinc-800'
+                : 'bg-zinc-950 text-zinc-500 border-zinc-900'
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                wsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                wsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'
               }`}
             />
-            {wsConnected ? 'WS STREAMING' : 'WS CONNECTING'}
+            {wsConnected ? 'WS LIVE' : 'WS CONNECTING'}
           </span>
         </div>
       </div>
 
-      <div className="flex items-center space-x-3">
-        {/* Refresh Button */}
+      <div className="flex items-center space-x-2.5">
+        {/* Refresh / Sync Button */}
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition flex items-center gap-1.5"
+          className="px-3 py-1.5 text-xs font-mono font-medium text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 rounded-lg border border-zinc-800 transition flex items-center gap-1.5"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-emerald-400' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-white' : ''}`} />
           <span>Sync</span>
         </button>
 
@@ -96,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({
         {isEmergency ? (
           <button
             onClick={onResetKillSwitch}
-            className="px-4 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600/50 rounded-lg shadow transition flex items-center gap-1.5"
+            className="px-3.5 py-1.5 text-xs font-mono font-bold text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 rounded-lg shadow transition flex items-center gap-1.5"
           >
             <Shield className="w-3.5 h-3.5" />
             <span>Reset Kill Switch</span>
@@ -104,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
         ) : (
           <button
             onClick={onKillSwitch}
-            className="px-4 py-1.5 text-xs font-semibold text-rose-300 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/50 rounded-lg shadow hover:shadow-rose-900/40 transition flex items-center gap-1.5 group"
+            className="px-3.5 py-1.5 text-xs font-mono font-bold text-rose-400 hover:text-white bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 rounded-lg transition flex items-center gap-1.5 group"
           >
             <ShieldAlert className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
             <span>Kill Switch</span>

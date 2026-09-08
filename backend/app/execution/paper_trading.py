@@ -90,7 +90,7 @@ class PaperExchangeSimulator:
 
     def __init__(
         self,
-        starting_capital: float = 50.0,
+        starting_capital: float = 10000.0,
         fee_rate: float = 0.001,  # 0.10% Binance spot standard
         slippage_rate: float = 0.0005,  # 0.05% realistic market slippage
     ):

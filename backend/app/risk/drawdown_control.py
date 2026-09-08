@@ -15,11 +15,11 @@ class DrawdownController:
 
     def __init__(
         self,
-        starting_capital: float = 50.0,
-        max_daily_loss_pct: float = 1.03,  # 3% max daily loss ($1.50)
-        max_weekly_loss_pct: float = 1.08,  # 8% max weekly loss ($4.00)
-        max_drawdown_pct: float = 0.10,  # 10% max drawdown from peak ($5.00)
-        max_consecutive_losses: int = 100,  # 3 consecutive losses -> cool down
+        starting_capital: float = 10000.0,
+        max_daily_loss_pct: float = 1.0,  # 100% daily loss allowance
+        max_weekly_loss_pct: float = 1.0,  # 100% weekly loss allowance
+        max_drawdown_pct: float = 0.95,  # 95% max drawdown allowance
+        max_consecutive_losses: int = 100,  # Continuous trading allowed
         max_daily_trades: int = 1000,
     ):
         self.starting_capital = starting_capital

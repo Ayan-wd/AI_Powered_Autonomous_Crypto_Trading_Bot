@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     LIVE_TRADING: bool = False
 
     # --- Capital & Trading Parameters ---
-    STARTING_CAPITAL: float = Field(default=50.0, gt=0, description="Virtual or initial capital in USD")
+    STARTING_CAPITAL: float = Field(default=10000.0, gt=0, description="Virtual or initial capital in USD")
     BASE_CURRENCY: str = "USDT"
     TRADING_SYMBOL: str = "BTCUSDT"
     DEFAULT_TIMEFRAME: str = "15m"
@@ -75,12 +75,12 @@ class Settings(BaseSettings):
     TARGET_RETURN_THRESHOLD: float = Field(default=0.005, gt=0.0)
 
     # --- Risk Management Controls ---
-    MAX_RISK_PER_TRADE_PCT: float = Field(default=0.04, ge=0.001, le=0.20, description="Risk per trade")
-    MAX_POSITION_SIZE_USD: float = Field(default=50.0, gt=0, description="Max position size")
-    MAX_DAILY_LOSS_PCT: float = Field(default=0.50, ge=0.01, le=2.0, description="Stop if daily loss exceeded")
-    MAX_WEEKLY_LOSS_PCT: float = Field(default=0.80, ge=0.02, le=2.0, description="Stop if weekly loss exceeded")
-    MAX_DRAWDOWN_PCT: float = Field(default=0.50, ge=0.05, le=1.0, description="Kill switch if drawdown exceeded")
-    MAX_CONSECUTIVE_LOSSES: int = Field(default=30, ge=1, le=100)
+    MAX_RISK_PER_TRADE_PCT: float = Field(default=0.25, ge=0.001, le=1.0, description="Risk per trade")
+    MAX_POSITION_SIZE_USD: float = Field(default=10000.0, gt=0, description="Max position size")
+    MAX_DAILY_LOSS_PCT: float = Field(default=1.0, ge=0.01, le=5.0, description="Stop if daily loss exceeded")
+    MAX_WEEKLY_LOSS_PCT: float = Field(default=1.0, ge=0.02, le=5.0, description="Stop if weekly loss exceeded")
+    MAX_DRAWDOWN_PCT: float = Field(default=0.95, ge=0.05, le=1.0, description="Kill switch if drawdown exceeded")
+    MAX_CONSECUTIVE_LOSSES: int = Field(default=100, ge=1, le=1000)
     MAX_DAILY_TRADES: int = Field(default=1000, ge=1, le=10000)
     DEFAULT_STOP_LOSS_PCT: float = Field(default=0.015, gt=0.0, le=0.10)
     DEFAULT_TAKE_PROFIT_PCT: float = Field(default=0.030, gt=0.0, le=0.20)

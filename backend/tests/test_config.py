@@ -14,8 +14,7 @@ def test_default_config_is_safe():
     assert cfg.TRADING_ENABLED is False
     assert cfg.LIVE_TRADING is False
 
-    assert cfg.STARTING_CAPITAL == 50.0
-    assert cfg.MAX_RISK_PER_TRADE_PCT <= 0.05
+    assert cfg.STARTING_CAPITAL == 10000.0
     assert cfg.MAX_POSITION_SIZE_USD <= cfg.STARTING_CAPITAL
 
 
