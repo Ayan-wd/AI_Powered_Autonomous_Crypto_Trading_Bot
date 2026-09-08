@@ -7,7 +7,7 @@ and failsafe dual-confirmation for live trading.
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional, Union
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -86,13 +86,14 @@ class Settings(BaseSettings):
     DEFAULT_TAKE_PROFIT_PCT: float = Field(default=0.030, gt=0.0, le=0.20)
 
     # --- Server & Monitoring ---
-    API_HOST: str = "127.0.0.1"
-    API_PORT: int = 8000
+    API_HOST: str = Field(default="0.0.0.0", validation_alias=AliasChoices("API_HOST", "HOST"))
+    API_PORT: int = Field(default=8000, validation_alias=AliasChoices("API_PORT", "PORT"))
     LOG_LEVEL: str = "INFO"
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
+        "*",
     ]
 
     @field_validator("CORS_ORIGINS", mode="before")

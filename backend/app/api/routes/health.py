@@ -31,3 +31,13 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         "database": db_status,
         "environment": settings.ENVIRONMENT,
     }
+
+
+@router.get("/ping", status_code=status.HTTP_200_OK)
+async def keep_alive_ping():
+    """Lightweight keep-alive ping for uptime monitors to prevent free cloud spin-downs."""
+    return {
+        "status": "pong",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "mode": settings.TRADING_MODE.value,
+    }
