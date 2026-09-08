@@ -29,6 +29,7 @@ class StrategyDecisionEngine:
         df_candles: pd.DataFrame,
         account_equity: float,
         current_open_position: Optional[Dict[str, Any]] = None,
+        symbol: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Evaluate full trading system: Signal -> Risk Checks -> Sizing -> Final Order Decision.
@@ -37,6 +38,7 @@ class StrategyDecisionEngine:
         action = raw_signal["raw_action"]
         current_price = raw_signal.get("current_price", 0.0)
         atr = raw_signal.get("atr", 0.0)
+        target_symbol = symbol or (current_open_position.get("symbol") if current_open_position else None) or settings.TRADING_SYMBOL
 
         # 1. Evaluate Exit Conditions if a position is currently open
         if current_open_position:
@@ -100,10 +102,11 @@ class StrategyDecisionEngine:
                     "reason": raw_signal["reason"],
                     "confidence": raw_signal["confidence"],
                     "order_details": {
-                        "symbol": settings.TRADING_SYMBOL,
+                        "symbol": target_symbol,
                         "side": "BUY",
                         "type": "MARKET",
                         "quantity": risk_eval["quantity"],
+                        "position_size_usd": risk_eval["position_value_usd"],
                         "position_value_usd": risk_eval["position_value_usd"],
                         "entry_price": current_price,
                         "stop_loss": risk_eval["stop_loss"],

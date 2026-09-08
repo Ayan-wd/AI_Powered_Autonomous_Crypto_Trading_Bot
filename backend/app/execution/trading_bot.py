@@ -111,96 +111,136 @@ class TradingBotEngine:
             await asyncio.sleep(self.tick_interval_sec)
 
     async def _tick(self) -> None:
-        """Execute one evaluation tick."""
+        """Execute one evaluation tick with multi-coin scanner support."""
         async with async_session_factory() as session:
-            # 1. Fetch current price
-            ticker = await self.market_engine.get_live_ticker(self.symbol)
-            current_price = ticker.price
-
-            # Broadcast live tick to connected WebSocket clients
-            await ws_manager.broadcast("TICKER_UPDATE", {
-                "symbol": ticker.symbol,
-                "price": ticker.price,
-                "bid_price": ticker.bid_price,
-                "ask_price": ticker.ask_price,
-                "price_change_24h_pct": ticker.price_change_24h_pct,
-                "volume_24h": ticker.volume_24h,
-                "timestamp": ticker.timestamp,
-            })
-
-            # 2. Evaluate active position Stop-Loss / Take-Profit triggers
-            sl_tp_closed = await order_manager.check_intrabar_triggers(
-                current_price=current_price,
-                session=session,
-            )
-            if sl_tp_closed:
-                logger.info(f"Intrabar trigger closed trade: {sl_tp_closed['trade_id']} ({sl_tp_closed['exit_reason']})")
-                await ws_manager.broadcast("POSITION_CLOSED", sl_tp_closed)
-
-            # 3. Fetch latest candles from DB or Binance fallback
-            df = await self.market_engine.get_candles_dataframe(
-                symbol=self.symbol,
-                timeframe=self.timeframe,
-                limit=200,
-                session=session,
-            )
-
-            if df.empty or len(df) < 50:
-                return
-
-            # 4. Check if we have a new closed candle or position change
-            balances = order_manager.get_account_balances(current_price)
-            current_equity = balances["total_equity"]
             active_pos = order_manager.get_active_position()
 
-            # 5. Evaluate Multi-Factor Strategy Engine
-            decision = strategy_engine.evaluate_decision(
-                df_candles=df,
-                account_equity=current_equity,
-                current_open_position=active_pos,
-            )
-            decision["timestamp"] = datetime.now(timezone.utc).isoformat()
-            self.last_decision = decision
+            # 1. If we have an open position, prioritize managing that specific coin
+            if active_pos:
+                pos_symbol = active_pos["symbol"]
+                ticker = await self.market_engine.get_live_ticker(pos_symbol)
+                current_price = ticker.price
 
-            # Broadcast strategy signal update
-            await ws_manager.broadcast("STRATEGY_DECISION", decision)
+                await ws_manager.broadcast("TICKER_UPDATE", {
+                    "symbol": ticker.symbol,
+                    "price": ticker.price,
+                    "bid_price": ticker.bid_price,
+                    "ask_price": ticker.ask_price,
+                    "price_change_24h_pct": ticker.price_change_24h_pct,
+                    "volume_24h": ticker.volume_24h,
+                    "timestamp": ticker.timestamp,
+                })
 
-            # 6. Execute Trading Actions
-            action = decision.get("action")
-
-            if action == "BUY" and active_pos is None:
-                # Check risk permission
-                can_trade, denial_reason = risk_manager.drawdown_controller.can_open_new_trade(current_equity)
-                if can_trade and decision.get("order_details"):
-                    order_det = decision["order_details"]
-                    logger.info(f"Executing BUY order based on strategy signal: {decision['reason']}")
-                    open_res = await order_manager.open_position(
-                        symbol=self.symbol,
-                        price=current_price,
-                        position_size_usd=order_det["position_size_usd"],
-                        stop_loss=order_det["stop_loss"],
-                        take_profit=order_det["take_profit"],
-                        model_probability=decision.get("confidence"),
-                        strategy_reason=decision.get("reason"),
-                        explanation_json=json.dumps(decision.get("numerical_explanation", [])),
-                        session=session,
-                    )
-                    await ws_manager.broadcast("ORDER_FILLED", open_res)
-                    await ws_manager.broadcast("POSITION_UPDATE", order_manager.get_active_position())
-                else:
-                    logger.warning(f"Strategy signaled BUY but Risk Gatekeeper denied: {denial_reason}")
-                    await ws_manager.broadcast("RISK_DENIAL", {"reason": denial_reason})
-
-            elif action == "SELL" and active_pos is not None:
-                logger.info(f"Executing SELL / CLOSE position based on strategy signal: {decision['reason']}")
-                close_res = await order_manager.close_position(
-                    exit_price=current_price,
-                    exit_reason="STRATEGY_SELL",
+                sl_tp_closed = await order_manager.check_intrabar_triggers(
+                    current_price=current_price,
                     session=session,
                 )
-                if close_res:
-                    await ws_manager.broadcast("POSITION_CLOSED", close_res)
+                if sl_tp_closed:
+                    logger.info(f"Intrabar trigger closed trade: {sl_tp_closed['trade_id']} ({sl_tp_closed['exit_reason']})")
+                    await ws_manager.broadcast("POSITION_CLOSED", sl_tp_closed)
                     await ws_manager.broadcast("POSITION_UPDATE", None)
+                    return
+
+                # Update trailing decision on open position
+                df = await self.market_engine.get_candles_dataframe(
+                    symbol=pos_symbol,
+                    timeframe=self.timeframe,
+                    limit=100,
+                    session=session,
+                )
+                if not df.empty:
+                    balances = order_manager.get_account_balances(current_price)
+                    decision = strategy_engine.evaluate_decision(
+                        df_candles=df,
+                        account_equity=balances["total_equity"],
+                        current_open_position=active_pos,
+                        symbol=pos_symbol,
+                    )
+                    decision["timestamp"] = datetime.now(timezone.utc).isoformat()
+                    self.last_decision = decision
+                    await ws_manager.broadcast("STRATEGY_DECISION", decision)
+
+                    # Check manual/strategy exit
+                    if decision.get("action") == "SELL":
+                        close_res = await order_manager.close_position(
+                            exit_price=current_price,
+                            exit_reason="STRATEGY_SELL",
+                            session=session,
+                        )
+                        if close_res:
+                            await ws_manager.broadcast("POSITION_CLOSED", close_res)
+                            await ws_manager.broadcast("POSITION_UPDATE", None)
+                return
+
+            # 2. No active position open -> Scan candidate coin(s)
+            symbols_to_scan = (
+                settings.SUPPORTED_SYMBOLS
+                if self.symbol in ("ALL", "MULTI", "WATCHLIST")
+                else [self.symbol]
+            )
+
+            balances = order_manager.get_account_balances()
+            current_equity = balances["total_equity"]
+            can_trade, denial_reason = risk_manager.drawdown_controller.can_open_new_trade(current_equity)
+            if not can_trade:
+                logger.warning(f"Risk Gatekeeper preventing new trades: {denial_reason}")
+                return
+
+            for sym in symbols_to_scan:
+                try:
+                    ticker = await self.market_engine.get_live_ticker(sym)
+                    current_price = ticker.price
+
+                    await ws_manager.broadcast("TICKER_UPDATE", {
+                        "symbol": ticker.symbol,
+                        "price": ticker.price,
+                        "bid_price": ticker.bid_price,
+                        "ask_price": ticker.ask_price,
+                        "price_change_24h_pct": ticker.price_change_24h_pct,
+                        "volume_24h": ticker.volume_24h,
+                        "timestamp": ticker.timestamp,
+                    })
+
+                    df = await self.market_engine.get_candles_dataframe(
+                        symbol=sym,
+                        timeframe=self.timeframe,
+                        limit=100,
+                        session=session,
+                    )
+                    if df.empty or len(df) < 50:
+                        continue
+
+                    decision = strategy_engine.evaluate_decision(
+                        df_candles=df,
+                        account_equity=current_equity,
+                        current_open_position=None,
+                        symbol=sym,
+                    )
+                    decision["timestamp"] = datetime.now(timezone.utc).isoformat()
+                    self.last_decision = decision
+                    await ws_manager.broadcast("STRATEGY_DECISION", decision)
+
+                    action = decision.get("action")
+                    if action == "BUY" and decision.get("order_details"):
+                        order_det = decision["order_details"]
+                        logger.info(f"Executing BUY order on {sym}: {decision['reason']}")
+                        open_res = await order_manager.open_position(
+                            symbol=sym,
+                            price=current_price,
+                            position_size_usd=order_det.get("position_size_usd") or order_det.get("position_value_usd", 10.0),
+                            stop_loss=order_det["stop_loss"],
+                            take_profit=order_det["take_profit"],
+                            model_probability=decision.get("confidence"),
+                            strategy_reason=decision.get("reason"),
+                            explanation_json=json.dumps(decision.get("numerical_explanation", [])),
+                            session=session,
+                        )
+                        await ws_manager.broadcast("ORDER_FILLED", open_res)
+                        await ws_manager.broadcast("POSITION_UPDATE", order_manager.get_active_position())
+                        # Only 1 position at a time (anti-Martingale & capital preservation)
+                        break
+                except Exception as e:
+                    logger.warning(f"Error scanning candidate coin {sym}: {e}")
 
             # 7. Periodically record equity snapshot (every ~12 ticks = 60s)
             if self.iteration_count % 12 == 0:

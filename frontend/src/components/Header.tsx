@@ -9,6 +9,7 @@ interface HeaderProps {
   onResetKillSwitch: () => void;
   loading: boolean;
   wsConnected?: boolean;
+  isDaemonRunning?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,9 +19,11 @@ export const Header: React.FC<HeaderProps> = ({
   onResetKillSwitch,
   loading,
   wsConnected = false,
+  isDaemonRunning = false,
 }) => {
   const isEmergency = status?.kill_switch_active;
   const mode = status?.trading_mode || 'PAPER';
+  const isRunning = isDaemonRunning || status?.bot_state === 'RUNNING';
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur px-6 py-4 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-50">
@@ -53,12 +56,12 @@ export const Header: React.FC<HeaderProps> = ({
             className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${
               isEmergency
                 ? 'bg-rose-500/20 text-rose-300 border-rose-500'
-                : status?.bot_state === 'RUNNING'
+                : isRunning
                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                 : 'bg-slate-700/50 text-slate-400 border-slate-700'
             }`}
           >
-            {isEmergency ? 'EMERGENCY HALT' : status?.bot_state || 'INITIALIZING'}
+            {isEmergency ? 'EMERGENCY HALT' : isRunning ? 'ACTIVE' : 'STOPPED'}
           </span>
 
           <span

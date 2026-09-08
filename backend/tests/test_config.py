@@ -9,10 +9,11 @@ from backend.app.core.config import Settings, TradingMode
 
 def test_default_config_is_safe():
     """Verify default configuration starts in PAPER mode with trading disabled."""
-    cfg = Settings()
+    cfg = Settings(_env_file=None)
     assert cfg.TRADING_MODE == TradingMode.PAPER
     assert cfg.TRADING_ENABLED is False
     assert cfg.LIVE_TRADING is False
+
     assert cfg.STARTING_CAPITAL == 50.0
     assert cfg.MAX_RISK_PER_TRADE_PCT <= 0.05
     assert cfg.MAX_POSITION_SIZE_USD <= cfg.STARTING_CAPITAL

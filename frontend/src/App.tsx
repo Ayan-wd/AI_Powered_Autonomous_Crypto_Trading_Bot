@@ -56,12 +56,14 @@ export function App() {
   const [resettingPaper, setResettingPaper] = useState<boolean>(false);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [apiConnected, setApiConnected] = useState<boolean>(false);
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('BTCUSDT');
+  const [selectedTimeframe, setSelectedTimeframe] = useState<string>('1m');
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const symbol = status?.symbol || 'BTCUSDT';
-      const timeframe = status?.timeframe || '15m';
+      const symbol = selectedSymbol === 'ALL' ? 'BTCUSDT' : (botDaemon?.symbol && botDaemon.symbol !== 'ALL' ? botDaemon.symbol : selectedSymbol);
+      const timeframe = botDaemon?.timeframe || selectedTimeframe;
 
       const [
         statusRes,
@@ -149,10 +151,12 @@ export function App() {
     };
   }, []);
 
-  const handleStartBot = async () => {
+  const handleStartBot = async (sym?: string, tf?: string) => {
     try {
       setBotActionLoading(true);
-      await apiService.startBot(status?.symbol || 'BTCUSDT', status?.timeframe || '15m');
+      const targetSym = sym || selectedSymbol;
+      const targetTf = tf || selectedTimeframe;
+      await apiService.startBot(targetSym, targetTf);
       await fetchData();
     } catch (e: any) {
       alert('Error starting bot: ' + e.message);
@@ -290,6 +294,7 @@ export function App() {
         onResetKillSwitch={handleResetKillSwitch}
         loading={loading}
         wsConnected={wsConnected}
+        isDaemonRunning={botDaemon?.is_running ?? false}
       />
 
       {/* Backend connection warning banner if not connected */}
@@ -311,6 +316,10 @@ export function App() {
           onStartBot={handleStartBot}
           onStopBot={handleStopBot}
           loading={botActionLoading}
+          selectedSymbol={selectedSymbol}
+          onSymbolChange={setSelectedSymbol}
+          selectedTimeframe={selectedTimeframe}
+          onTimeframeChange={setSelectedTimeframe}
         />
 
         {/* Metric Cards Banner */}
