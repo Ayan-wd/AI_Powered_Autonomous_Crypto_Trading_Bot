@@ -30,15 +30,42 @@ class StrategyDecisionEngine:
         account_equity: float,
         current_open_position: Optional[Dict[str, Any]] = None,
         symbol: Optional[str] = None,
+        current_market_price: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Evaluate full trading system: Signal -> Risk Checks -> Sizing -> Final Order Decision.
+        Guarantees temporal consistency and directional Stop-Loss integrity.
         """
         raw_signal = self.signal_gen.generate_signal(df_candles)
         action = raw_signal["raw_action"]
-        current_price = raw_signal.get("current_price", 0.0)
+        candle_price = raw_signal.get("current_price", 0.0)
+        current_price = (
+            current_market_price
+            if (current_market_price is not None and current_market_price > 0)
+            else candle_price
+        )
         atr = raw_signal.get("atr", 0.0)
         target_symbol = symbol or (current_open_position.get("symbol") if current_open_position else None) or settings.TRADING_SYMBOL
+
+        # Validate synchronization between live ticker and candle feed
+        if current_market_price is not None and current_market_price > 0 and candle_price > 0:
+            price_divergence = abs(current_market_price - candle_price) / current_market_price
+            if price_divergence > 0.02:  # >2.0% divergence between live ticker and candle close
+                logger.warning(
+                    f"Market data desynchronization detected for {target_symbol}: "
+                    f"Live=${current_market_price:.2f} vs Candle=${candle_price:.2f} "
+                    f"({price_divergence * 100:.2f}% divergence). Suppressing trade."
+                )
+                return {
+                    "action": "HOLD",
+                    "reason": (
+                        f"Market data desynchronization detected ({price_divergence * 100:.1f}% divergence). "
+                        f"Candles not synchronized with live ticker."
+                    ),
+                    "confidence": 0.0,
+                    "order_details": None,
+                    "numerical_explanation": raw_signal.get("reasons_list", []),
+                }
 
         # 1. Evaluate Exit Conditions if a position is currently open
         if current_open_position:
@@ -97,6 +124,23 @@ class StrategyDecisionEngine:
             )
 
             if risk_eval["approved"]:
+                sl = risk_eval["stop_loss"]
+                tp = risk_eval["take_profit"]
+
+                # Strict directional invariant check
+                if sl >= current_price or tp <= current_price:
+                    logger.error(
+                        f"DIRECTIONAL INVARIANT VIOLATION on {target_symbol}: "
+                        f"Entry=${current_price:.2f}, SL=${sl:.2f}, TP=${tp:.2f}. Order aborted."
+                    )
+                    return {
+                        "action": "HOLD",
+                        "reason": f"Directional invariant violation: SL (${sl:.2f}) must be < Entry (${current_price:.2f}).",
+                        "confidence": 0.0,
+                        "order_details": None,
+                        "numerical_explanation": raw_signal["reasons_list"],
+                    }
+
                 return {
                     "action": "BUY",
                     "reason": raw_signal["reason"],
@@ -109,8 +153,8 @@ class StrategyDecisionEngine:
                         "position_size_usd": risk_eval["position_value_usd"],
                         "position_value_usd": risk_eval["position_value_usd"],
                         "entry_price": current_price,
-                        "stop_loss": risk_eval["stop_loss"],
-                        "take_profit": risk_eval["take_profit"],
+                        "stop_loss": sl,
+                        "take_profit": tp,
                         "risk_reward_ratio": risk_eval["risk_reward_ratio"],
                     },
                     "numerical_explanation": raw_signal["reasons_list"],

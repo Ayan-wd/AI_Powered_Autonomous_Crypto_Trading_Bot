@@ -122,6 +122,8 @@ async def execute_trade_now(
         model_probability=0.75,
         strategy_reason="Immediate User-Authorized Order Execution",
         session=db,
+        ask_price=ticker.ask_price,
+        bid_price=ticker.bid_price,
     )
     return {
         "status": "SUCCESS",

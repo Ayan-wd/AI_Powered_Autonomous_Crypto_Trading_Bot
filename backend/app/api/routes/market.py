@@ -45,15 +45,16 @@ async def get_market_ticker(symbol: str = Query(default="BTCUSDT")):
 async def get_market_watchlist():
     """Fetch live ticker and price statistics for all supported coins in parallel."""
     import asyncio
-    from backend.app.core.config import SUPPORTED_SYMBOLS
+    from backend.app.core.config import settings, SUPPORTED_SYMBOLS
 
     client = BinanceClient()
     try:
         await client.initialize()
-        tasks = [client.get_ticker(symbol=sym) for sym in SUPPORTED_SYMBOLS]
+        symbols = getattr(settings, "SUPPORTED_SYMBOLS", SUPPORTED_SYMBOLS)
+        tasks = [client.get_ticker(symbol=sym) for sym in symbols]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         tickers = []
-        for sym, res in zip(SUPPORTED_SYMBOLS, results):
+        for sym, res in zip(symbols, results):
             if isinstance(res, Exception):
                 tickers.append({
                     "symbol": sym,

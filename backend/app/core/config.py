@@ -151,3 +151,4 @@ class Settings(BaseSettings):
 
 # Global cached settings instance
 settings = Settings()
+SUPPORTED_SYMBOLS = settings.SUPPORTED_SYMBOLS

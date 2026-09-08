@@ -134,6 +134,8 @@ class TradingBotEngine:
                 sl_tp_closed = await order_manager.check_intrabar_triggers(
                     current_price=current_price,
                     session=session,
+                    bid_price=ticker.bid_price,
+                    ask_price=ticker.ask_price,
                 )
                 if sl_tp_closed:
                     logger.info(f"Intrabar trigger closed trade: {sl_tp_closed['trade_id']} ({sl_tp_closed['exit_reason']})")
@@ -155,6 +157,7 @@ class TradingBotEngine:
                         account_equity=balances["total_equity"],
                         current_open_position=active_pos,
                         symbol=pos_symbol,
+                        current_market_price=current_price,
                     )
                     decision["timestamp"] = datetime.now(timezone.utc).isoformat()
                     self.last_decision = decision
@@ -166,6 +169,7 @@ class TradingBotEngine:
                             exit_price=current_price,
                             exit_reason="STRATEGY_SELL",
                             session=session,
+                            bid_price=ticker.bid_price,
                         )
                         if close_res:
                             await ws_manager.broadcast("POSITION_CLOSED", close_res)
@@ -215,6 +219,7 @@ class TradingBotEngine:
                         account_equity=current_equity,
                         current_open_position=None,
                         symbol=sym,
+                        current_market_price=current_price,
                     )
                     decision["timestamp"] = datetime.now(timezone.utc).isoformat()
                     self.last_decision = decision
@@ -234,7 +239,13 @@ class TradingBotEngine:
                             strategy_reason=decision.get("reason"),
                             explanation_json=json.dumps(decision.get("numerical_explanation", [])),
                             session=session,
+                            ask_price=ticker.ask_price,
+                            bid_price=ticker.bid_price,
                         )
+                        if open_res.get("status") != "FILLED":
+                            logger.warning(f"Order rejected by OrderManager: {open_res.get('reason')}")
+                            continue
+
                         await ws_manager.broadcast("ORDER_FILLED", open_res)
                         await ws_manager.broadcast("POSITION_UPDATE", order_manager.get_active_position())
                         # Only 1 position at a time (anti-Martingale & capital preservation)

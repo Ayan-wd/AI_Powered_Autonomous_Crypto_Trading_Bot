@@ -4,6 +4,7 @@ Integration tests for FastAPI endpoints.
 
 import pytest
 from httpx import AsyncClient
+from backend.app.core.config import settings
 
 
 @pytest.mark.asyncio
@@ -51,8 +52,8 @@ async def test_account_summary(client: AsyncClient):
     response = await client.get("/api/v1/account/summary")
     assert response.status_code == 200
     data = response.json()
-    assert data["starting_capital"] == 50.0
-    assert data["total_equity"] == 50.0
+    assert data["starting_capital"] == settings.STARTING_CAPITAL
+    assert data["total_equity"] == settings.STARTING_CAPITAL
     assert data["base_currency"] == "USDT"
 
 
@@ -62,7 +63,7 @@ async def test_config_endpoint(client: AsyncClient):
     response = await client.get("/api/v1/config")
     assert response.status_code == 200
     data = response.json()
-    assert data["STARTING_CAPITAL"] == 50.0
+    assert data["STARTING_CAPITAL"] == settings.STARTING_CAPITAL
     assert data["TRADING_MODE"] == "PAPER"
 
 

@@ -60,16 +60,63 @@ class RiskManager:
                 "take_profit": None,
             }
 
-        # 2. Establish Stop Loss price if not provided (default 1.5% below entry or 1.5x ATR)
+        # 2. Establish and validate Stop Loss price
         if stop_loss_price is None or stop_loss_price <= 0:
-            if atr > 0:
-                stop_loss_price = current_price - (1.5 * atr)
+            if side == "BUY":
+                if atr > 0:
+                    stop_loss_price = current_price - (1.5 * atr)
+                else:
+                    stop_loss_price = current_price * (1.0 - settings.DEFAULT_STOP_LOSS_PCT)
             else:
-                stop_loss_price = current_price * (1.0 - settings.DEFAULT_STOP_LOSS_PCT)
+                if atr > 0:
+                    stop_loss_price = current_price + (1.5 * atr)
+                else:
+                    stop_loss_price = current_price * (1.0 + settings.DEFAULT_STOP_LOSS_PCT)
 
-        # 3. Establish Take Profit price (2:1 reward/risk ratio -> 3.0% above entry or 3x ATR)
+        # STRICT DIRECTIONAL INVARIANT CHECKS:
+        if side == "BUY":
+            if stop_loss_price >= current_price:
+                logger.error(
+                    f"CRITICAL REJECTION: Long Stop-Loss (${stop_loss_price:.2f}) is on wrong side of entry (${current_price:.2f})."
+                )
+                return {
+                    "approved": False,
+                    "reason": f"DIRECTIONAL INVARIANT VIOLATION: Long stop-loss (${stop_loss_price:.2f}) must be strictly below entry price (${current_price:.2f}).",
+                    "quantity": 0.0,
+                    "position_value_usd": 0.0,
+                    "stop_loss": None,
+                    "take_profit": None,
+                }
+        elif side == "SELL":
+            if stop_loss_price <= current_price:
+                logger.error(
+                    f"CRITICAL REJECTION: Short Stop-Loss (${stop_loss_price:.2f}) is on wrong side of entry (${current_price:.2f})."
+                )
+                return {
+                    "approved": False,
+                    "reason": f"DIRECTIONAL INVARIANT VIOLATION: Short stop-loss (${stop_loss_price:.2f}) must be strictly above entry price (${current_price:.2f}).",
+                    "quantity": 0.0,
+                    "position_value_usd": 0.0,
+                    "stop_loss": None,
+                    "take_profit": None,
+                }
+
+        # 3. Establish Take Profit price (2:1 reward/risk ratio)
         risk_distance = abs(current_price - stop_loss_price)
-        take_profit_price = current_price + (2.0 * risk_distance)
+        if side == "BUY":
+            take_profit_price = current_price + (2.0 * risk_distance)
+        else:
+            take_profit_price = current_price - (2.0 * risk_distance)
+
+        if side == "BUY" and take_profit_price <= current_price:
+            return {
+                "approved": False,
+                "reason": "Take-profit price must be strictly greater than entry price for Long.",
+                "quantity": 0.0,
+                "position_value_usd": 0.0,
+                "stop_loss": None,
+                "take_profit": None,
+            }
 
         # 4. Calculate safe position size
         sizing = self.position_sizer.calculate_position_size(
