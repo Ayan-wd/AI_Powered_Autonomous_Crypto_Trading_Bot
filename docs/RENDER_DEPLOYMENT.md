@@ -48,10 +48,10 @@ git push origin main
    - **Service Name**: `ai-trading-bot`
    - **Environment**: Docker (`Dockerfile`)
    - **Plan**: Free ($0)
-   - **Region**: Oregon (or nearest to your preference)
+   - **Region**: **Frankfurt (EU)** *(CRITICAL: Do NOT select Oregon/Ohio US regions, as Binance blocks US server IP addresses with HTTP Error 451)*
 5. Click **Apply**. Render will start building the Docker container automatically!
 
-*(Alternative: You can also click **New +** -> **Web Service**, select Docker, and choose the Free instance type).*
+*(Alternative: If deploying manually via **New +** -> **Web Service**, select **Frankfurt (EU)** as the region and Docker as the environment).*
 
 ---
 

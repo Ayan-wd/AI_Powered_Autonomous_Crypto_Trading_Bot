@@ -94,7 +94,13 @@ class BinanceClient(ExchangeInterface):
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"Binance HTTP error {e.response.status_code} on {endpoint}: {e.response.text}")
+            if e.response.status_code == 451:
+                logger.error(
+                    f"Binance HTTP 451 (Restricted Location) on {endpoint}. "
+                    "Binance blocks US server IPs. If deploying on Render, set Region to 'Frankfurt (EU)'."
+                )
+            else:
+                logger.error(f"Binance HTTP error {e.response.status_code} on {endpoint}: {e.response.text}")
             raise
         except httpx.RequestError as e:
             logger.error(f"Binance connection error on {endpoint}: {e}")
