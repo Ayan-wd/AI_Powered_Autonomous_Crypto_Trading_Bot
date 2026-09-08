@@ -83,12 +83,12 @@ class EquityRepository:
         self.session = session
 
     async def get_latest(self) -> Optional[EquitySnapshot]:
-        stmt = select(EquitySnapshot).order_by(desc(EquitySnapshot.timestamp)).limit(1)
+        stmt = select(EquitySnapshot).order_by(desc(EquitySnapshot.id)).limit(1)
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
     async def get_history(self, limit: int = 100) -> List[EquitySnapshot]:
-        stmt = select(EquitySnapshot).order_by(desc(EquitySnapshot.timestamp)).limit(limit)
+        stmt = select(EquitySnapshot).order_by(desc(EquitySnapshot.id)).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
@@ -118,6 +118,30 @@ class CandleRepository:
 
     async def insert_bulk(self, candles: List[Candle]):
         self.session.add_all(candles)
+        await self.session.commit()
+
+    async def upsert_many(self, candles: List[Candle]):
+        """Upsert candles avoiding unique constraint violations on (symbol, timeframe, timestamp)."""
+        if not candles:
+            return
+        for c in candles:
+            stmt = select(Candle).where(
+                Candle.symbol == c.symbol,
+                Candle.timeframe == c.timeframe,
+                Candle.timestamp == c.timestamp,
+            )
+            existing = (await self.session.execute(stmt)).scalars().first()
+            if not existing:
+                self.session.add(c)
+            else:
+                existing.open = c.open
+                existing.high = c.high
+                existing.low = c.low
+                existing.close = c.close
+                existing.volume = c.volume
+                existing.quote_volume = c.quote_volume
+                existing.trades_count = c.trades_count
+                existing.is_closed = c.is_closed
         await self.session.commit()
 
 

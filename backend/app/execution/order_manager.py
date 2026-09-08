@@ -72,12 +72,35 @@ class OrderManager:
         strategy_reason: Optional[str] = None,
         explanation_json: Optional[str] = None,
         session: Optional[AsyncSession] = None,
+        ask_price: Optional[float] = None,
+        bid_price: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Open a new long trading position according to risk parameters.
         Routes to Binance Testnet if authorized or Paper Simulator.
+        Enforces strict directional Stop-Loss integrity before placement.
         Persists Order and Trade records to database.
         """
+        # Strict directional pre-trade validation
+        effective_buy_price = ask_price if (ask_price is not None and ask_price > 0) else price
+        if stop_loss is not None and stop_loss >= effective_buy_price:
+            logger.error(
+                f"ORDER ABORTED on {symbol}: Inverted Stop-Loss (${stop_loss:.2f}) >= Entry (${effective_buy_price:.2f})"
+            )
+            return {
+                "status": "REJECTED",
+                "reason": f"DIRECTIONAL INVARIANT VIOLATION: Stop-loss (${stop_loss:.2f}) must be < Entry (${effective_buy_price:.2f}).",
+            }
+
+        if take_profit is not None and take_profit <= effective_buy_price:
+            logger.error(
+                f"ORDER ABORTED on {symbol}: Inverted Take-Profit (${take_profit:.2f}) <= Entry (${effective_buy_price:.2f})"
+            )
+            return {
+                "status": "REJECTED",
+                "reason": f"DIRECTIONAL INVARIANT VIOLATION: Take-profit (${take_profit:.2f}) must be > Entry (${effective_buy_price:.2f}).",
+            }
+
         is_paper = not self.is_live_or_testnet()
         exchange_order_id = None
 
@@ -108,6 +131,7 @@ class OrderManager:
             model_probability=model_probability,
             strategy_reason=strategy_reason,
             explanation_json=explanation_json,
+            ask_price=ask_price,
         )
 
         if fill_res.get("status") != "FILLED":
@@ -174,12 +198,19 @@ class OrderManager:
         exit_price: float,
         exit_reason: str = "SIGNAL_EXIT",
         session: Optional[AsyncSession] = None,
+        bid_price: Optional[float] = None,
+        adverse_slippage_pct: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Close active trading position, compute realized PnL, update DrawdownController,
         and persist closed trade and equity snapshot to database.
         """
-        closed_summary = self.simulator.execute_market_sell(exit_price=exit_price, exit_reason=exit_reason)
+        closed_summary = self.simulator.execute_market_sell(
+            exit_price=exit_price,
+            exit_reason=exit_reason,
+            bid_price=bid_price,
+            adverse_slippage_pct=adverse_slippage_pct,
+        )
         if not closed_summary:
             return None
 
@@ -204,7 +235,7 @@ class OrderManager:
                     db_trade.exit_time = closed_summary["exit_time"]
                     db_trade.pnl = closed_summary["pnl"]
                     db_trade.pnl_pct = closed_summary["pnl_pct"]
-                    db_trade.fees += closed_summary["fees"]
+                    db_trade.fees = closed_summary["fees"]
                     db_trade.status = "CLOSED"
                     db_trade.strategy_reason = closed_summary["strategy_reason"]
                     await trade_repo.update(db_trade)
@@ -232,7 +263,7 @@ class OrderManager:
                     message=(
                         f"CLOSED {closed_summary['symbol']} at ${closed_summary['exit_price']:.2f} | "
                         f"PnL: ${closed_summary['pnl']:.2f} ({closed_summary['pnl_pct'] * 100:.2f}%) | "
-                        f"Reason: {exit_reason}"
+                        f"Fees: ${closed_summary['fees']:.4f} | Reason: {exit_reason}"
                     ),
                     details_json=json.dumps(closed_summary, default=str),
                 )
@@ -247,8 +278,10 @@ class OrderManager:
         candle_high: Optional[float] = None,
         candle_low: Optional[float] = None,
         session: Optional[AsyncSession] = None,
+        bid_price: Optional[float] = None,
+        ask_price: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Evaluate SL/TP hits on active position."""
+        """Evaluate SL/TP hits on active position with conservative adverse slippage."""
         if not self.simulator.active_position:
             return None
 
@@ -256,17 +289,31 @@ class OrderManager:
         high_val = candle_high if candle_high is not None else current_price
         low_val = candle_low if candle_low is not None else current_price
 
-        # Check Stop Loss
-        if pos.stop_loss is not None and low_val <= pos.stop_loss:
-            return await self.close_position(
-                exit_price=pos.stop_loss, exit_reason="STOP_LOSS", session=session
-            )
+        # Check Stop Loss Trigger for Long
+        if pos.side == "BUY" and pos.stop_loss is not None:
+            if low_val <= pos.stop_loss or current_price <= pos.stop_loss:
+                breached_price = min(pos.stop_loss, low_val, current_price)
+                return await self.close_position(
+                    exit_price=breached_price,
+                    exit_reason="STOP_LOSS",
+                    session=session,
+                    bid_price=bid_price,
+                    adverse_slippage_pct=max(self.simulator.slippage_rate, 0.001),
+                )
 
-        # Check Take Profit
-        if pos.take_profit is not None and high_val >= pos.take_profit:
-            return await self.close_position(
-                exit_price=pos.take_profit, exit_reason="TAKE_PROFIT", session=session
-            )
+        # Check Take Profit Trigger for Long
+        if pos.side == "BUY" and pos.take_profit is not None:
+            if high_val >= pos.take_profit or current_price >= pos.take_profit:
+                return await self.close_position(
+                    exit_price=pos.take_profit,
+                    exit_reason="TAKE_PROFIT",
+                    session=session,
+                    bid_price=bid_price,
+                )
+
+        # Just update mark price
+        pos.update_mark_price(current_price)
+        return None
 
         # Just update mark price
         pos.update_mark_price(current_price)

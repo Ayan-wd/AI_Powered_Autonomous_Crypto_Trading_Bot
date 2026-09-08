@@ -13,17 +13,20 @@ from backend.app.core.logging import logger
 from backend.app.execution.exchange_interface import ExchangeInterface, OrderBookData, TickerData
 
 
+_DEFAULT = object()
+
+
 class BinanceClient(ExchangeInterface):
     """Async Binance Spot API Client."""
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        api_secret: Optional[str] = None,
+        api_key: Any = _DEFAULT,
+        api_secret: Any = _DEFAULT,
         testnet: Optional[bool] = None,
     ):
-        self.api_key = api_key or settings.BINANCE_API_KEY
-        self.api_secret = api_secret or settings.BINANCE_API_SECRET
+        self.api_key = settings.BINANCE_API_KEY if api_key is _DEFAULT else api_key
+        self.api_secret = settings.BINANCE_API_SECRET if api_secret is _DEFAULT else api_secret
         self.testnet = testnet if testnet is not None else settings.BINANCE_TESTNET
 
         if self.testnet:
@@ -37,7 +40,7 @@ class BinanceClient(ExchangeInterface):
         """Initialize the underlying HTTP client."""
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
-                timeout=httpx.Timeout(10.0, connect=5.0),
+                timeout=httpx.Timeout(20.0, connect=10.0),
                 headers={"X-MBX-APIKEY": self.api_key} if self.api_key else {},
             )
             logger.info(f"Binance client initialized. Testnet={self.testnet}, BaseURL={self.base_url}")
@@ -72,16 +75,19 @@ class BinanceClient(ExchangeInterface):
         params = params or {}
         headers = {}
 
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+
         if signed:
             if not self.api_key or not self.api_secret:
                 raise ValueError("Binance API key and secret are required for signed operations.")
             params["timestamp"] = int(time.time() * 1000)
-            params["recvWindow"] = 5000
-            query_string = "&".join(f"{k}={v}" for k, v in sorted(params.items()))
-            params["signature"] = self._generate_signature(query_string)
+            params["recvWindow"] = 60000
+            import urllib.parse
+            query_string = urllib.parse.urlencode(params)
+            signature = self._generate_signature(query_string)
+            url = f"{url}?{query_string}&signature={signature}"
+            params = None
             headers["X-MBX-APIKEY"] = self.api_key
-
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
 
         try:
             response = await self._client.request(method, url, params=params, headers=headers)

@@ -1,6 +1,6 @@
 import React from 'react';
 import type { TestnetAccountResponse, TestnetStatusResponse } from '../services/api';
-import { Globe, Lock, ShieldCheck, CheckCircle2, AlertTriangle, Key } from 'lucide-react';
+import { Globe, ShieldCheck, CheckCircle2, Key } from 'lucide-react';
 
 interface TestnetCardProps {
   testnetStatus: TestnetStatusResponse | null;
@@ -12,29 +12,32 @@ export const TestnetCard: React.FC<TestnetCardProps> = ({ testnetStatus, testnet
   const hasKeys = testnetStatus?.api_key_configured ?? false;
   const isTestnet = testnetStatus?.testnet ?? true;
 
+  const balances = testnetAccount?.account?.balances || {};
+  const balanceEntries = Object.entries(balances);
+
   return (
-    <div className="bg-slate-900/60 backdrop-blur-md border border-slate-800/80 rounded-xl p-5 shadow-xl">
+    <div className="bg-[#09090b] border border-zinc-800 rounded-xl p-5 shadow-xl">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+      <div className="flex items-center justify-between border-b border-zinc-800 pb-3 mb-4">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-amber-500/10 rounded-lg text-amber-400 border border-amber-500/20">
+          <div className="p-2 bg-black rounded-lg text-white border border-zinc-800">
             <Globe className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-sm text-slate-200">Binance Spot Testnet Gateway</h3>
+              <h3 className="font-semibold text-sm text-white">Binance Spot Testnet Gateway</h3>
               <span
-                className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+                className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded border ${
                   isOnline
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                    : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
                 }`}
               >
                 {isOnline ? 'ONLINE' : 'UNREACHABLE'}
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-mono">
-              Base URL: {testnetStatus?.base_url || 'https://testnet.binance.vision/api/v3'}
+            <p className="text-xs text-zinc-400 font-mono">
+              Endpoint: {testnetStatus?.base_url || 'https://testnet.binance.vision/api/v3'}
             </p>
           </div>
         </div>
@@ -43,8 +46,8 @@ export const TestnetCard: React.FC<TestnetCardProps> = ({ testnetStatus, testnet
           <span
             className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono font-medium rounded-lg border ${
               hasKeys
-                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
-                : 'bg-slate-800 text-slate-400 border-slate-700'
+                ? 'bg-white text-black border-white font-bold'
+                : 'bg-zinc-900 text-zinc-400 border-zinc-800'
             }`}
           >
             <Key className="w-3.5 h-3.5" />
@@ -55,56 +58,58 @@ export const TestnetCard: React.FC<TestnetCardProps> = ({ testnetStatus, testnet
 
       {/* Grid of Diagnostics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 font-mono">
-        <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5">
-          <div className="text-[10px] text-slate-500 uppercase">API Environment</div>
-          <div className="text-xs font-bold text-slate-200 mt-1">
-            {isTestnet ? 'SPOT TESTNET' : 'SPOT MAINNET'}
+        <div className="bg-black/60 border border-zinc-800/80 rounded-lg p-3">
+          <div className="text-[10px] text-zinc-400 uppercase">API Environment</div>
+          <div className="text-xs font-bold text-white mt-1">
+            {isTestnet ? 'Binance Spot Testnet' : 'Live Production'}
           </div>
         </div>
 
-        <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5">
-          <div className="text-[10px] text-slate-500 uppercase">Server Latency</div>
-          <div className="text-xs font-bold text-emerald-400 mt-1">
-            {testnetStatus?.latency_ms !== undefined ? `${testnetStatus.latency_ms} ms` : '~45 ms'}
+        <div className="bg-black/60 border border-zinc-800/80 rounded-lg p-3">
+          <div className="text-[10px] text-zinc-400 uppercase">Account Status</div>
+          <div className="text-xs font-bold text-white mt-1">
+            {testnetAccount?.account?.account_type || 'SPOT ACCOUNT'}
           </div>
         </div>
 
-        <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5">
-          <div className="text-[10px] text-slate-500 uppercase">Trade Permission</div>
-          <div className="text-xs font-bold text-slate-200 mt-1 flex items-center gap-1">
-            {testnetAccount?.account?.can_trade ?? false ? (
-              <span className="text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> ENABLED
-              </span>
-            ) : (
-              <span className="text-amber-400 flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5" /> SIMULATED
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-slate-950/60 border border-slate-800/60 rounded-lg p-2.5">
-          <div className="text-[10px] text-slate-500 uppercase">Security Audit</div>
+        <div className="bg-black/60 border border-zinc-800/80 rounded-lg p-3">
+          <div className="text-[10px] text-zinc-400 uppercase">Trading Permissions</div>
           <div className="text-xs font-bold text-emerald-400 mt-1 flex items-center gap-1">
-            <Lock className="w-3.5 h-3.5 text-emerald-400" />
-            <span>NO WITHDRAWALS</span>
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+            <span>SPOT_PERMITTED</span>
+          </div>
+        </div>
+
+        <div className="bg-black/60 border border-zinc-800/80 rounded-lg p-3">
+          <div className="text-[10px] text-zinc-400 uppercase">Order Execution Mode</div>
+          <div className="text-xs font-bold text-white mt-1">
+            HMAC-SHA256 SIGNED
           </div>
         </div>
       </div>
 
-      {/* Safety Banner */}
-      <div className="bg-indigo-950/30 border border-indigo-500/20 rounded-lg p-3 text-xs text-slate-300 font-mono flex items-start gap-2.5">
-        <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-        <div className="space-y-0.5">
-          <div className="font-semibold text-indigo-300">Dual-Flag Execution Safety Protocol:</div>
-          <p className="text-[11px] text-slate-400 leading-relaxed">
-            Real order submission requires BOTH <span className="text-amber-300">TRADING_ENABLED=true</span> and{' '}
-            <span className="text-amber-300">LIVE_TRADING=true</span> with HMAC credentials. In default paper mode,
-            all orders execute with zero financial risk in our high-fidelity simulator.
-          </p>
+      {/* Account Balances List if Available */}
+      {balanceEntries.length > 0 && (
+        <div className="mt-2 pt-3 border-t border-zinc-900">
+          <div className="text-[10px] uppercase text-zinc-400 font-mono mb-2 flex items-center gap-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-zinc-400" />
+            <span>Testnet Balances Portfolio</span>
+          </div>
+          <div className="flex flex-wrap gap-2 font-mono">
+            {balanceEntries.map(([asset, free]) => (
+              <div
+                key={asset}
+                className="bg-black border border-zinc-800 rounded-md px-3 py-1.5 text-xs flex items-center gap-2"
+              >
+                <span className="font-bold text-white">{asset}:</span>
+                <span className="text-zinc-300">
+                  {typeof free === 'number' ? free.toLocaleString(undefined, { maximumFractionDigits: 4 }) : free}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

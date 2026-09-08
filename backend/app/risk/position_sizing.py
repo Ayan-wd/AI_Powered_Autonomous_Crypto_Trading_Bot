@@ -15,9 +15,9 @@ class PositionSizer:
 
     def __init__(
         self,
-        max_risk_pct: float = 0.01,  # 1% risk of total equity per trade
-        max_position_size_usd: float = 10.0,  # Max $10 on $50 account
-        min_order_size_usd: float = 5.0,  # Minimum spot order value
+        max_risk_pct: float = 0.25,  # Maximum risk per trade (25% risk budget)
+        max_position_size_usd: float = 10000.0,  # Max position size up to $10,000 USD testnet balance
+        min_order_size_usd: float = 10.0,  # Binance testnet minimum spot order
     ):
         self.max_risk_pct = max_risk_pct
         self.max_position_size_usd = max_position_size_usd

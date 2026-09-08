@@ -27,7 +27,6 @@ async def get_market_ticker(symbol: str = Query(default="BTCUSDT")):
         return ticker.model_dump()
     except Exception as e:
         logger.error(f"Error fetching ticker for {symbol}: {e}")
-        # Return fallback placeholder if network is unavailable
         return {
             "symbol": symbol.upper(),
             "price": 91500.0,
@@ -40,6 +39,39 @@ async def get_market_ticker(symbol: str = Query(default="BTCUSDT")):
         }
     finally:
         await client.close()
+
+
+@router.get("/watchlist")
+async def get_market_watchlist():
+    """Fetch live ticker and price statistics for all supported coins in parallel."""
+    import asyncio
+    from backend.app.core.config import settings, SUPPORTED_SYMBOLS
+
+    client = BinanceClient()
+    try:
+        await client.initialize()
+        symbols = getattr(settings, "SUPPORTED_SYMBOLS", SUPPORTED_SYMBOLS)
+        tasks = [client.get_ticker(symbol=sym) for sym in symbols]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        tickers = []
+        for sym, res in zip(symbols, results):
+            if isinstance(res, Exception):
+                tickers.append({
+                    "symbol": sym,
+                    "price": 0.0,
+                    "bid_price": 0.0,
+                    "ask_price": 0.0,
+                    "volume_24h": 0.0,
+                    "price_change_24h_pct": 0.0,
+                    "timestamp": 0,
+                    "status": "FALLBACK",
+                })
+            else:
+                tickers.append(res.model_dump())
+        return tickers
+    finally:
+        await client.close()
+
 
 
 @router.get("/candles")
@@ -59,23 +91,37 @@ async def get_candles(
     result = await db.execute(stmt)
     candles = list(result.scalars().all())
 
+    # If no candles are stored yet for this coin/timeframe, auto-fetch from Binance
+    if not candles:
+        try:
+            stored = await market_engine.fetch_and_store_historical_candles(
+                symbol=symbol.upper(),
+                timeframe=timeframe,
+                limit=min(limit, 100),
+                session=db,
+            )
+            if stored:
+                candles = stored[-limit:]
+        except Exception as e:
+            logger.warning(f"Auto-fetch candles for {symbol} ({timeframe}) notice: {e}")
+
     # Return chronological order
     return [
         {
-            "id": c.id,
+            "id": getattr(c, "id", i + 1),
             "symbol": c.symbol,
             "timeframe": c.timeframe,
-            "timestamp": c.timestamp.isoformat(),
+            "timestamp": c.timestamp.isoformat() if hasattr(c.timestamp, "isoformat") else str(c.timestamp),
             "open": c.open,
             "high": c.high,
             "low": c.low,
             "close": c.close,
             "volume": c.volume,
-            "quote_volume": c.quote_volume,
-            "trades_count": c.trades_count,
-            "is_closed": c.is_closed,
+            "quote_volume": getattr(c, "quote_volume", 0.0),
+            "trades_count": getattr(c, "trades_count", 0),
+            "is_closed": getattr(c, "is_closed", True),
         }
-        for c in reversed(candles)
+        for i, c in enumerate(reversed(candles))
     ]
 
 
