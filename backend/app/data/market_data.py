@@ -16,6 +16,44 @@ from backend.app.execution.binance_client import BinanceClient
 from backend.app.execution.exchange_interface import ExchangeInterface, TickerData
 
 
+TIMEFRAME_SECONDS = {
+    "1m": 60,
+    "3m": 180,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "1h": 3600,
+    "2h": 7200,
+    "4h": 14400,
+    "6h": 21600,
+    "8h": 28800,
+    "12h": 43200,
+    "1d": 86400,
+}
+
+
+def get_timeframe_seconds(timeframe: str) -> int:
+    """Return period duration in seconds for a given timeframe."""
+    return TIMEFRAME_SECONDS.get(timeframe.lower(), 60)
+
+
+def is_candle_stale(
+    latest_timestamp: datetime,
+    timeframe: str,
+    max_staleness_sec: Optional[int] = None,
+) -> bool:
+    """Check if the latest candle timestamp is older than the allowed staleness window."""
+    if latest_timestamp.tzinfo is None:
+        latest_timestamp = latest_timestamp.replace(tzinfo=timezone.utc)
+    now_utc = datetime.now(timezone.utc)
+    allowed_sec = (
+        max_staleness_sec
+        if max_staleness_sec is not None
+        else (get_timeframe_seconds(timeframe) * 2)
+    )
+    return (now_utc - latest_timestamp).total_seconds() > allowed_sec
+
+
 class MarketDataEngine:
     """Engine responsible for fetching, validating, and persisting market candles."""
 
@@ -61,27 +99,11 @@ class MarketDataEngine:
                 )
             )
 
-        if session and candle_models:
-            # Upsert / insert new candles (avoid duplicate key violations)
-            for c in candle_models:
-                # Check if exists
-                stmt = select(Candle).where(
-                    Candle.symbol == c.symbol,
-                    Candle.timeframe == c.timeframe,
-                    Candle.timestamp == c.timestamp,
-                )
-                existing = (await session.execute(stmt)).scalars().first()
-                if not existing:
-                    session.add(c)
-                else:
-                    existing.open = c.open
-                    existing.high = c.high
-                    existing.low = c.low
-                    existing.close = c.close
-                    existing.volume = c.volume
-                    existing.quote_volume = c.quote_volume
-                    existing.trades_count = c.trades_count
-            await session.commit()
+        if session is not None and candle_models:
+            from backend.app.database.repositories import CandleRepository
+
+            repo = CandleRepository(session)
+            await repo.upsert_many(candle_models)
             logger.info(f"Stored {len(candle_models)} validated candles for {symbol} ({timeframe})")
 
         return candle_models
@@ -92,13 +114,17 @@ class MarketDataEngine:
         timeframe: str,
         limit: int = 200,
         session: Optional[AsyncSession] = None,
+        force_refresh: bool = False,
+        max_staleness_sec: Optional[int] = None,
     ) -> pd.DataFrame:
         """
         Retrieve candles as a clean Pandas DataFrame with UTC DatetimeIndex.
-        If database has insufficient candles, automatically fetches from exchange.
+        Guarantees temporal freshness: automatically fetches from exchange if local DB is stale,
+        insufficient, or force_refresh is requested.
         """
         candles: List[Candle] = []
-        if session:
+        is_stale = False
+        if session and not force_refresh:
             stmt = (
                 select(Candle)
                 .where(Candle.symbol == symbol, Candle.timeframe == timeframe)
@@ -107,9 +133,17 @@ class MarketDataEngine:
             )
             res = await session.execute(stmt)
             candles = list(res.scalars().all())
+            if candles:
+                latest_ts = max(c.timestamp for c in candles)
+                is_stale = is_candle_stale(latest_ts, timeframe, max_staleness_sec)
 
-        if len(candles) < limit:
-            logger.info(f"Local DB has only {len(candles)} candles. Fetching fresh {limit} candles from exchange...")
+        if force_refresh or len(candles) < limit or is_stale:
+            reason = (
+                "force_refresh requested"
+                if force_refresh
+                else ("local DB candles stale" if is_stale else f"only {len(candles)} candles in DB")
+            )
+            logger.info(f"Fetching fresh {limit} candles for {symbol} ({timeframe}) from exchange ({reason})...")
             candles = await self.fetch_and_store_historical_candles(
                 symbol=symbol, timeframe=timeframe, limit=limit, session=session
             )
@@ -117,7 +151,7 @@ class MarketDataEngine:
         candles = sorted(candles, key=lambda x: x.timestamp)
         data = [
             {
-                "timestamp": c.timestamp,
+                "timestamp": c.timestamp if c.timestamp.tzinfo else c.timestamp.replace(tzinfo=timezone.utc),
                 "open": c.open,
                 "high": c.high,
                 "low": c.low,

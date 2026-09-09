@@ -17,11 +17,19 @@ async def get_account_summary(db: AsyncSession = Depends(get_db)):
     equity_repo = EquityRepository(db)
     latest_snapshot = await equity_repo.get_latest()
 
-    total_equity = latest_snapshot.total_equity if latest_snapshot else settings.STARTING_CAPITAL
-    available_balance = latest_snapshot.available_balance if latest_snapshot else settings.STARTING_CAPITAL
-    unrealized_pnl = latest_snapshot.unrealized_pnl if latest_snapshot else 0.0
-    realized_pnl = latest_snapshot.realized_pnl if latest_snapshot else 0.0
-    drawdown_pct = latest_snapshot.drawdown_pct if latest_snapshot else 0.0
+    # Adapt equity baseline if starting capital was upgraded (e.g. from $50 to $10,000 testnet balance)
+    if latest_snapshot and latest_snapshot.total_equity >= settings.STARTING_CAPITAL * 0.5:
+        total_equity = latest_snapshot.total_equity
+        available_balance = latest_snapshot.available_balance
+        unrealized_pnl = latest_snapshot.unrealized_pnl
+        realized_pnl = latest_snapshot.realized_pnl
+        drawdown_pct = latest_snapshot.drawdown_pct
+    else:
+        total_equity = settings.STARTING_CAPITAL
+        available_balance = settings.STARTING_CAPITAL
+        unrealized_pnl = 0.0
+        realized_pnl = 0.0
+        drawdown_pct = 0.0
 
     net_profit = total_equity - settings.STARTING_CAPITAL
     return_pct = (net_profit / settings.STARTING_CAPITAL) * 100.0 if settings.STARTING_CAPITAL > 0 else 0.0

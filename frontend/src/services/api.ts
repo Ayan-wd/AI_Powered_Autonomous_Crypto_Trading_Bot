@@ -253,6 +253,12 @@ export const apiService = {
     return res.json();
   },
 
+  async getMarketWatchlist(): Promise<TickerResponse[]> {
+    const res = await fetch(`${API_BASE}/market/watchlist`);
+    if (!res.ok) throw new Error('Failed to fetch watchlist');
+    return res.json();
+  },
+
   async getCandles(symbol = 'BTCUSDT', timeframe = '15m', limit = 100): Promise<CandleResponse[]> {
     const res = await fetch(`${API_BASE}/market/candles?symbol=${symbol}&timeframe=${timeframe}&limit=${limit}`);
     if (!res.ok) throw new Error('Failed to fetch candles');

@@ -83,3 +83,52 @@ async def reset_paper_trading(
         "message": f"Paper trading wallet and risk metrics reset to ${cap:.2f} USD.",
         "balances": order_manager.get_account_balances(),
     }
+
+
+@router.post("/trade/execute-now")
+async def execute_trade_now(
+    symbol: Optional[str] = Query(default="BTCUSDT"),
+    side: str = Query(default="BUY"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Execute a trade immediately at current live market price with
+    institutional risk sizing ($10 max cap, 1% risk) and automated Stop-Loss/Take-Profit.
+    """
+    sym = symbol.upper()
+    active_pos = order_manager.get_active_position()
+    if active_pos:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot open new trade: Position on {active_pos['symbol']} is already active."
+        )
+
+    ticker = await bot_engine.market_engine.get_live_ticker(sym)
+    current_price = ticker.price
+    balances = order_manager.get_account_balances(current_price)
+    equity = balances["total_equity"]
+
+    # Stop Loss 1.5%, Take Profit 3.0%
+    stop_loss = current_price * (1.0 - settings.DEFAULT_STOP_LOSS_PCT)
+    take_profit = current_price * (1.0 + settings.DEFAULT_TAKE_PROFIT_PCT)
+    size_usd = min(equity * 0.20, settings.MAX_POSITION_SIZE_USD)
+
+    order_result = await order_manager.open_position(
+        symbol=sym,
+        price=current_price,
+        position_size_usd=size_usd,
+        stop_loss=stop_loss,
+        take_profit=take_profit,
+        model_probability=0.75,
+        strategy_reason="Immediate User-Authorized Order Execution",
+        session=db,
+        ask_price=ticker.ask_price,
+        bid_price=ticker.bid_price,
+    )
+    return {
+        "status": "SUCCESS",
+        "message": f"Executed {side} order on {sym} at ${current_price:.2f} USD.",
+        "order": order_result,
+        "position": order_manager.get_active_position(),
+    }
+

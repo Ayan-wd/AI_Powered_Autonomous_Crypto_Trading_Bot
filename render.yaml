@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: ai-trading-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api/v1/health/ping
+    autoDeploy: true
+    envVars:
+      - key: TRADING_MODE
+        value: PAPER
+      - key: TRADING_ENABLED
+        value: "true"
+      - key: LIVE_TRADING
+        value: "false"
+      - key: STARTING_CAPITAL
+        value: "10000.0"
+      - key: BASE_CURRENCY
+        value: USDT
+      - key: TRADING_SYMBOL
+        value: BTCUSDT
+      - key: DEFAULT_TIMEFRAME
+        value: 1m
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./data/trading_bot.db
+      - key: LOG_LEVEL
+        value: INFO
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: BINANCE_TESTNET
+        value: "true"
+      - key: BINANCE_API_KEY
+        sync: false
+      - key: BINANCE_API_SECRET
+        sync: false

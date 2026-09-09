@@ -1,6 +1,6 @@
 import React from 'react';
 import type { ActivePosition } from '../services/api';
-import { Layers, ArrowUpRight, ShieldCheck, XCircle, RotateCcw } from 'lucide-react';
+import { Layers, ShieldCheck, XCircle, RotateCcw } from 'lucide-react';
 
 interface ActivePositionCardProps {
   position: ActivePosition | null;
@@ -21,33 +21,33 @@ export const ActivePositionCard: React.FC<ActivePositionCardProps> = ({
   const isProfit = (position?.unrealized_pnl_usd ?? 0) >= 0;
 
   return (
-    <div className="bg-slate-900/60 backdrop-blur-md border border-slate-800/80 rounded-xl p-5 shadow-xl">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+    <div className="bg-[#09090b] border border-zinc-800 rounded-xl p-5 shadow-xl">
+      <div className="flex items-center justify-between border-b border-zinc-800 pb-3 mb-4">
         <div className="flex items-center gap-2.5">
           <div
             className={`p-2 rounded-lg border ${
               hasPos
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                : 'bg-slate-800 text-slate-400 border-slate-700'
+                ? 'bg-white text-black border-white'
+                : 'bg-black text-zinc-400 border-zinc-800'
             }`}
           >
             <Layers className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-sm text-slate-200">Active Position & Paper Ledger</h3>
+              <h3 className="font-semibold text-sm text-white">Active Position & Paper Ledger</h3>
               <span
-                className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${
+                className={`px-2 py-0.5 text-[10px] font-mono font-bold rounded border ${
                   hasPos
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 animate-pulse'
-                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 animate-pulse'
+                    : 'bg-zinc-900 text-zinc-400 border-zinc-800'
                 }`}
               >
                 {hasPos ? 'POSITION OPEN' : 'NO OPEN POSITION'}
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-mono">
-              {hasPos ? `${position.symbol} • LONG SPOT` : '100% Cash / Capital Preservation Active'}
+            <p className="text-xs text-zinc-400 font-mono">
+              {hasPos ? `${position.symbol} • SPOT ORDER` : '100% Cash / Capital Preservation Active'}
             </p>
           </div>
         </div>
@@ -57,108 +57,84 @@ export const ActivePositionCard: React.FC<ActivePositionCardProps> = ({
             <button
               onClick={onClosePosition}
               disabled={closing}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 border border-rose-500/40 transition-colors disabled:opacity-50 cursor-pointer shadow-lg shadow-rose-950/40"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition disabled:opacity-50 cursor-pointer shadow-sm"
             >
               <XCircle className="w-3.5 h-3.5" />
-              <span>{closing ? 'Closing...' : 'Close Position (Market)'}</span>
+              <span>{closing ? 'Closing...' : 'Close Position'}</span>
             </button>
           )}
 
           <button
             onClick={onResetPaper}
             disabled={resetting}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors disabled:opacity-50 cursor-pointer"
-            title="Reset Paper Account Wallet to $50.00"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-medium rounded-lg bg-black hover:bg-zinc-900 text-zinc-300 hover:text-white border border-zinc-800 transition disabled:opacity-50 cursor-pointer"
+            title="Reset capital back to $10,000.00 (Testnet Balance)"
           >
-            <RotateCcw className={`w-3.5 h-3.5 ${resetting ? 'animate-spin text-amber-400' : ''}`} />
-            <span>Reset Wallet</span>
+            <RotateCcw className={`w-3.5 h-3.5 ${resetting ? 'animate-spin text-white' : ''}`} />
+            <span>Reset ($10k)</span>
           </button>
         </div>
       </div>
 
       {hasPos ? (
-        <div className="space-y-4">
-          {/* Main Position Highlights */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3">
-              <div className="text-[10px] uppercase tracking-wider text-slate-400 font-mono">Entry Price</div>
-              <div className="text-base font-bold font-mono text-slate-200 mt-1">
-                ${position.entry_price.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 font-mono">
+          <div className="bg-black/60 border border-zinc-800/80 rounded-lg p-3">
+            <div className="text-[10px] text-zinc-400 uppercase">Symbol / Side</div>
+            <div className="text-sm font-black text-white mt-1">
+              {position.symbol} <span className="text-emerald-400 font-bold">{position.side}</span>
             </div>
+          </div>
 
-            <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3">
-              <div className="text-[10px] uppercase tracking-wider text-slate-400 font-mono">Mark Price</div>
-              <div className="text-base font-bold font-mono text-slate-200 mt-1">
-                ${position.current_price.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </div>
+          <div className="bg-black/60 border border-zinc-800/80 rounded-lg p-3">
+            <div className="text-[10px] text-zinc-400 uppercase">Entry Price</div>
+            <div className="text-sm font-bold text-white mt-1">
+              ${position.entry_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </div>
+          </div>
 
-            <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3">
-              <div className="text-[10px] uppercase tracking-wider text-slate-400 font-mono">Position Size</div>
-              <div className="text-base font-bold font-mono text-indigo-300 mt-1">
-                ${position.position_value_usd.toFixed(2)}{' '}
-                <span className="text-xs text-slate-400 font-normal">({position.quantity.toFixed(5)})</span>
-              </div>
+          <div className="bg-black/60 border border-zinc-800/80 rounded-lg p-3">
+            <div className="text-[10px] text-zinc-400 uppercase">Current Price</div>
+            <div className="text-sm font-bold text-white mt-1">
+              ${position.current_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </div>
+          </div>
 
+          <div className="bg-black/60 border border-zinc-800/80 rounded-lg p-3">
+            <div className="text-[10px] text-zinc-400 uppercase">Unrealized PnL</div>
             <div
-              className={`border rounded-lg p-3 ${
-                isProfit ? 'bg-emerald-950/30 border-emerald-800/50' : 'bg-rose-950/30 border-rose-800/50'
+              className={`text-sm font-black mt-1 flex items-center gap-0.5 ${
+                isProfit ? 'text-emerald-400' : 'text-rose-400'
               }`}
             >
-              <div className="text-[10px] uppercase tracking-wider text-slate-400 font-mono">Unrealized PnL</div>
-              <div
-                className={`text-base font-bold font-mono mt-1 flex items-center gap-1 ${
-                  isProfit ? 'text-emerald-400' : 'text-rose-400'
-                }`}
-              >
-                <ArrowUpRight className={`w-4 h-4 ${isProfit ? '' : 'rotate-90'}`} />
-                <span>
-                  {isProfit ? '+' : ''}${position.unrealized_pnl_usd.toFixed(2)} ({position.unrealized_pnl_pct.toFixed(2)}%)
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Intrabar SL / TP Levels */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs font-mono">
-            <div className="p-2.5 bg-slate-950/40 rounded-lg border border-slate-800/80 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                <span className="text-slate-400">Stop Loss (1 ATR):</span>
-              </div>
-              <span className="text-rose-400 font-bold">
-                ${position.stop_loss ? position.stop_loss.toFixed(2) : 'None'}
-              </span>
-            </div>
-
-            <div className="p-2.5 bg-slate-950/40 rounded-lg border border-slate-800/80 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span className="text-slate-400">Take Profit (2 ATR):</span>
-              </div>
-              <span className="text-emerald-400 font-bold">
-                ${position.take_profit ? position.take_profit.toFixed(2) : 'None'}
+              {isProfit ? '+' : ''}${position.unrealized_pnl_usd.toFixed(2)}
+              <span className="text-xs font-normal">
+                ({isProfit ? '+' : ''}
+                {position.unrealized_pnl_pct.toFixed(2)}%)
               </span>
             </div>
           </div>
 
-          {/* Strategy Reasoning */}
-          {position.strategy_reason && (
-            <div className="text-xs text-slate-400 font-mono bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
-              <span className="text-slate-500 uppercase text-[10px] block mb-0.5">Entry Rationale:</span>
-              <p className="text-slate-300">{position.strategy_reason}</p>
+          <div className="bg-black/60 border border-zinc-800/80 rounded-lg p-3">
+            <div className="text-[10px] text-zinc-400 uppercase">Stop Loss</div>
+            <div className="text-sm font-bold text-rose-400 mt-1">
+              {position.stop_loss ? `$${position.stop_loss.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'N/A'}
             </div>
-          )}
+          </div>
+
+          <div className="bg-black/60 border border-zinc-800/80 rounded-lg p-3">
+            <div className="text-[10px] text-zinc-400 uppercase">Take Profit</div>
+            <div className="text-sm font-bold text-emerald-400 mt-1">
+              {position.take_profit ? `$${position.take_profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : 'N/A'}
+            </div>
+          </div>
         </div>
       ) : (
-        <div className="py-6 text-center text-xs text-slate-400 font-mono bg-slate-950/30 rounded-lg border border-slate-800/50 flex flex-col items-center justify-center gap-1.5">
-          <ShieldCheck className="w-6 h-6 text-emerald-400/60 mb-1" />
-          <p className="text-slate-300 font-medium">All capital parked in cash ($50.00 USD baseline).</p>
-          <p className="text-[11px] text-slate-500">
-            Autonomous bot is scanning live market ticks and will only enter when statistical edge exceeds fee hurdle.
-          </p>
+        <div className="flex items-center justify-between bg-black/40 border border-zinc-800/60 rounded-lg p-4 font-mono text-xs">
+          <div className="flex items-center gap-2 text-zinc-400">
+            <ShieldCheck className="w-4 h-4 text-zinc-400" />
+            <span>Autonomous Risk Engine: Zero exposure. Capital is fully preserved in cash reserve.</span>
+          </div>
+          <span className="text-zinc-400">Ready for high-probability confluence</span>
         </div>
       )}
     </div>

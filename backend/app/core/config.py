@@ -6,8 +6,8 @@ and failsafe dual-confirmation for live trading.
 
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional
-from pydantic import Field, field_validator, model_validator
+from typing import List, Optional, Union
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -51,10 +51,18 @@ class Settings(BaseSettings):
     LIVE_TRADING: bool = False
 
     # --- Capital & Trading Parameters ---
-    STARTING_CAPITAL: float = Field(default=50.0, gt=0, description="Virtual or initial capital in USD")
+    STARTING_CAPITAL: float = Field(default=10000.0, gt=0, description="Virtual or initial capital in USD")
     BASE_CURRENCY: str = "USDT"
     TRADING_SYMBOL: str = "BTCUSDT"
     DEFAULT_TIMEFRAME: str = "15m"
+    SUPPORTED_SYMBOLS: List[str] = [
+        "BTCUSDT",
+        "ETHUSDT",
+        "SOLUSDT",
+        "BNBUSDT",
+        "DOGEUSDT",
+        "ADAUSDT",
+    ]
 
     # --- Database Configuration ---
     DATABASE_URL: str = "sqlite+aiosqlite:///./data/trading_bot.db"
@@ -67,31 +75,39 @@ class Settings(BaseSettings):
     TARGET_RETURN_THRESHOLD: float = Field(default=0.005, gt=0.0)
 
     # --- Risk Management Controls ---
-    MAX_RISK_PER_TRADE_PCT: float = Field(default=0.01, ge=0.001, le=0.05, description="Max 1% risk per trade")
-    MAX_POSITION_SIZE_USD: float = Field(default=10.0, gt=0, description="Max $10 position on $50 account")
-    MAX_DAILY_LOSS_PCT: float = Field(default=0.03, ge=0.01, le=0.10, description="Stop if daily loss >= 3%")
-    MAX_WEEKLY_LOSS_PCT: float = Field(default=0.08, ge=0.02, le=0.20, description="Stop if weekly loss >= 8%")
-    MAX_DRAWDOWN_PCT: float = Field(default=0.10, ge=0.05, le=0.30, description="Kill switch if drawdown >= 10%")
-    MAX_CONSECUTIVE_LOSSES: int = Field(default=3, ge=1, le=10)
-    MAX_DAILY_TRADES: int = Field(default=10, ge=1, le=50)
+    MAX_RISK_PER_TRADE_PCT: float = Field(default=0.25, ge=0.001, le=1.0, description="Risk per trade")
+    MAX_POSITION_SIZE_USD: float = Field(default=10000.0, gt=0, description="Max position size")
+    MAX_DAILY_LOSS_PCT: float = Field(default=1.0, ge=0.01, le=5.0, description="Stop if daily loss exceeded")
+    MAX_WEEKLY_LOSS_PCT: float = Field(default=1.0, ge=0.02, le=5.0, description="Stop if weekly loss exceeded")
+    MAX_DRAWDOWN_PCT: float = Field(default=0.95, ge=0.05, le=1.0, description="Kill switch if drawdown exceeded")
+    MAX_CONSECUTIVE_LOSSES: int = Field(default=100, ge=1, le=1000)
+    MAX_DAILY_TRADES: int = Field(default=1000, ge=1, le=10000)
     DEFAULT_STOP_LOSS_PCT: float = Field(default=0.015, gt=0.0, le=0.10)
     DEFAULT_TAKE_PROFIT_PCT: float = Field(default=0.030, gt=0.0, le=0.20)
 
     # --- Server & Monitoring ---
-    API_HOST: str = "127.0.0.1"
-    API_PORT: int = 8000
+    API_HOST: str = Field(default="0.0.0.0", validation_alias=AliasChoices("API_HOST", "HOST"))
+    API_PORT: int = Field(default=8000, validation_alias=AliasChoices("API_PORT", "PORT"))
     LOG_LEVEL: str = "INFO"
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
+        "*",
     ]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v):
         if isinstance(v, str):
-            return [i.strip() for i in v.split(",") if i.strip()]
+            v_clean = v.strip()
+            if v_clean.startswith("[") and v_clean.endswith("]"):
+                import json
+                try:
+                    return json.loads(v_clean)
+                except Exception:
+                    pass
+            return [i.strip() for i in v_clean.split(",") if i.strip()]
         return v
 
     @model_validator(mode="after")
@@ -136,3 +152,4 @@ class Settings(BaseSettings):
 
 # Global cached settings instance
 settings = Settings()
+SUPPORTED_SYMBOLS = settings.SUPPORTED_SYMBOLS

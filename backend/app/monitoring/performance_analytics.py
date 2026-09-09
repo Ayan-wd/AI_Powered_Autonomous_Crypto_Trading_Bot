@@ -4,6 +4,7 @@ Calculates risk-adjusted metrics, trade distribution, holding periods, payoff ra
 Sharpe/Sortino ratios, and drawdown analytics from trade history and equity snapshots.
 """
 
+import math
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 import numpy as np
@@ -56,7 +57,13 @@ class PerformanceAnalyticsEngine:
         gross_loss = float(abs(sum(losses)))
 
         win_rate = (len(wins) / len(closed_trades)) * 100.0 if closed_trades else 0.0
-        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (999.0 if gross_profit > 0 else 0.0)
+        if gross_loss > 0:
+            profit_factor = round(gross_profit / gross_loss, 2)
+        elif gross_profit > 0:
+            profit_factor = round(gross_profit, 2)
+        else:
+            profit_factor = 0.0
+
         expectancy_usd = float(np.mean(pnls)) if pnls else 0.0
         expectancy_pct = float(np.mean(pnl_pcts) * 100.0) if pnl_pcts else 0.0
 
@@ -134,10 +141,19 @@ class PerformanceAnalyticsEngine:
                 "max_drawdown_pct": 0.0,
                 "max_drawdown_usd": 0.0,
                 "peak_equity": starting_capital,
-                "current_equity": snapshots[-1].total_equity if snapshots else starting_capital,
+                "current_equity": snapshots[0].total_equity if snapshots else starting_capital,
             }
 
-        equities = [s.total_equity for s in snapshots]
+        # Ensure chronological order (oldest to newest)
+        try:
+            if snapshots[0].timestamp and snapshots[-1].timestamp and snapshots[0].timestamp > snapshots[-1].timestamp:
+                chrono_snapshots = list(reversed(snapshots))
+            else:
+                chrono_snapshots = list(snapshots)
+        except Exception:
+            chrono_snapshots = list(snapshots)
+
+        equities = [s.total_equity for s in chrono_snapshots]
         peak = starting_capital
         max_dd_pct = 0.0
         max_dd_usd = 0.0
@@ -156,7 +172,7 @@ class PerformanceAnalyticsEngine:
         eq_series = pd.Series(equities)
         pct_returns = eq_series.pct_change().dropna()
 
-        if pct_returns.empty or pct_returns.std() == 0:
+        if pct_returns.empty or len(pct_returns) < 2 or pd.isna(pct_returns.std()) or pct_returns.std() == 0:
             sharpe = 0.0
             sortino = 0.0
         else:
@@ -164,15 +180,27 @@ class PerformanceAnalyticsEngine:
             std_ret = pct_returns.std()
             # Annualization factor for ~15m snapshots (~35,040 periods/yr)
             annual_factor = np.sqrt(35040)
-            sharpe = float((mean_ret / std_ret) * annual_factor)
+            sharpe = float((mean_ret / std_ret) * annual_factor) if (std_ret and not pd.isna(std_ret) and std_ret > 0) else 0.0
 
             downside_returns = pct_returns[pct_returns < 0]
-            downside_std = downside_returns.std() if not downside_returns.empty else std_ret
-            sortino = float((mean_ret / downside_std) * annual_factor) if downside_std > 0 else 0.0
+            if len(downside_returns) >= 2 and not pd.isna(downside_returns.std()) and downside_returns.std() > 0:
+                downside_std = downside_returns.std()
+                sortino = float((mean_ret / downside_std) * annual_factor)
+            elif std_ret and not pd.isna(std_ret) and std_ret > 0:
+                sortino = float((mean_ret / std_ret) * annual_factor)
+            else:
+                sortino = 0.0
+
+        if math.isnan(sharpe) or math.isinf(sharpe):
+            sharpe = 0.0
+        if math.isnan(sortino) or math.isinf(sortino):
+            sortino = 0.0
 
         current_eq = equities[-1]
         total_return_pct = ((current_eq - starting_capital) / starting_capital) * 100.0
         calmar = (total_return_pct / max_dd_pct) if max_dd_pct > 0 else 0.0
+        if math.isnan(calmar) or math.isinf(calmar):
+            calmar = 0.0
 
         return {
             "sharpe_ratio": round(sharpe, 2),

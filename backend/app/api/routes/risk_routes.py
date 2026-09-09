@@ -18,7 +18,16 @@ async def get_risk_status(db: AsyncSession = Depends(get_db)):
     """Retrieve live risk parameters, circuit breakers, and loss limits."""
     equity_repo = EquityRepository(db)
     latest_snapshot = await equity_repo.get_latest()
-    current_equity = latest_snapshot.total_equity if latest_snapshot else settings.STARTING_CAPITAL
+    if latest_snapshot and latest_snapshot.total_equity >= settings.STARTING_CAPITAL * 0.5:
+        current_equity = latest_snapshot.total_equity
+    else:
+        current_equity = settings.STARTING_CAPITAL
+
+    # Ensure circuit breaker is reset if starting capital was upgraded
+    if risk_manager.drawdown_controller.is_circuit_breaker_active and current_equity >= settings.STARTING_CAPITAL * 0.9:
+        risk_manager.drawdown_controller.is_circuit_breaker_active = False
+        risk_manager.drawdown_controller.circuit_breaker_reason = None
+        risk_manager.drawdown_controller.high_water_mark = max(risk_manager.drawdown_controller.high_water_mark, current_equity)
 
     snapshot = risk_manager.drawdown_controller.get_risk_snapshot(current_equity)
     snapshot["max_risk_per_trade_pct"] = settings.MAX_RISK_PER_TRADE_PCT * 100.0

@@ -17,10 +17,14 @@ class SignalGenerator:
 
     def __init__(
         self,
-        min_prediction_confidence: float = 0.65,
+        min_prediction_confidence: Optional[float] = None,
         estimated_cost_hurdle_pct: float = 0.003,  # 0.30% minimum expected profit hurdle (covering 2x fee + 2x slippage)
     ):
-        self.min_confidence = min_prediction_confidence
+        self.min_confidence = (
+            min_prediction_confidence
+            if min_prediction_confidence is not None
+            else getattr(settings, "MIN_PREDICTION_CONFIDENCE", 0.65)
+        )
         self.cost_hurdle = estimated_cost_hurdle_pct
 
     def generate_signal(self, df_candles: pd.DataFrame) -> Dict[str, Any]:
@@ -51,9 +55,9 @@ class SignalGenerator:
 
         rsi = float(latest_features.get("rsi_14", 50.0))
         trend_regime = int(latest_features.get("regime_trend", 0))
-        vol_regime = int(latest_features.get("regime_volatility", 0))
-        close_p = float(latest_features.get("close", 0.0))
-        atr_14 = float(latest_features.get("atr_14", 0.0))
+        close_p = float(df_candles["close"].iloc[-1]) if "close" in df_candles.columns else 0.0
+        atr_pct = float(latest_features.get("atr_pct", 0.015))
+        atr_14 = float(df_features["atr_14"].iloc[-1]) if "atr_14" in df_features.columns else float(close_p * atr_pct)
 
         # 3. Deterministic Filter Logic
         # Condition A: Machine learning buy confidence
@@ -62,8 +66,14 @@ class SignalGenerator:
         # Condition B: Hurdle rate (expected return exceeds transaction costs)
         is_profitable_hurdle = expected_ret > self.cost_hurdle
 
-        # Condition C: Regime filter (no buy in strong downtrend unless extreme oversold bounce RSI < 28)
-        is_trend_acceptable = (trend_regime >= 0) or (trend_regime == -1 and rsi < 28.0)
+        # Condition C: Regime filter (avoid severe downtrends unless oversold bounce or strong ML signal)
+        ema_ratio = float(latest_features.get("ema_ratio_20_50", 0.0))
+        is_trend_acceptable = (
+            (trend_regime >= 0)
+            or (ema_ratio > -0.003)
+            or (rsi < 35.0)
+            or (buy_prob >= 0.70)
+        )
 
         # Condition D: Overbought exhaustion guard (RSI < 72)
         is_not_overbought = rsi < 72.0

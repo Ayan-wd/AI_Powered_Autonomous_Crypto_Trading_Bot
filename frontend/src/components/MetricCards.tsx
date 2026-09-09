@@ -8,8 +8,8 @@ interface MetricCardsProps {
 }
 
 export const MetricCards: React.FC<MetricCardsProps> = ({ account, metrics }) => {
-  const equity = account?.total_equity ?? 50.0;
-  const startingCapital = account?.starting_capital ?? 50.0;
+  const equity = account?.total_equity ?? 10000.0;
+  const startingCapital = account?.starting_capital ?? 10000.0;
   const netProfit = account?.net_profit ?? 0.0;
   const returnPct = account?.return_pct ?? 0.0;
   const drawdown = account?.drawdown_pct ?? 0.0;
@@ -19,13 +19,12 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ account, metrics }) =>
 
   const cards = [
     {
-      title: 'Total Account Equity',
+      title: 'Total Equity',
       value: `$${equity.toFixed(2)}`,
       subtext: `Starting: $${startingCapital.toFixed(2)}`,
       icon: DollarSign,
-      color: 'text-indigo-400',
-      bg: 'bg-indigo-500/10',
-      border: 'border-indigo-500/20',
+      color: 'text-white',
+      badge: 'USDT',
     },
     {
       title: 'Net Profit / Loss',
@@ -33,64 +32,66 @@ export const MetricCards: React.FC<MetricCardsProps> = ({ account, metrics }) =>
       subtext: `${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}% total return`,
       icon: TrendingUp,
       color: netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400',
-      bg: netProfit >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10',
-      border: netProfit >= 0 ? 'border-emerald-500/20' : 'border-rose-500/20',
+      badge: returnPct >= 0 ? '+RETURN' : '-DRAWDOWN',
     },
     {
-      title: 'Win Rate & Trades',
+      title: 'Win Rate & Count',
       value: `${winRate.toFixed(1)}%`,
       subtext: `${metrics?.winning_trades || 0}W / ${metrics?.losing_trades || 0}L (${totalTrades} total)`,
       icon: Award,
-      color: 'text-amber-400',
-      bg: 'bg-amber-500/10',
-      border: 'border-amber-500/20',
+      color: 'text-white',
+      badge: `${totalTrades} TRADES`,
     },
     {
       title: 'Profit Factor',
       value: profitFactor >= 999 ? '∞' : profitFactor.toFixed(2),
-      subtext: `Gross +$${metrics?.gross_profit.toFixed(2) || '0.00'} / -$${metrics?.gross_loss.toFixed(2) || '0.00'}`,
+      subtext: `+$${metrics?.gross_profit.toFixed(2) || '0.00'} / -$${metrics?.gross_loss.toFixed(2) || '0.00'}`,
       icon: Percent,
-      color: 'text-cyan-400',
-      bg: 'bg-cyan-500/10',
-      border: 'border-cyan-500/20',
+      color: 'text-white',
+      badge: 'RATIO',
     },
     {
       title: 'Max Drawdown',
       value: `${(drawdown * 100).toFixed(2)}%`,
-      subtext: `Risk Limit: ${( (account?.max_drawdown_limit_pct ?? 0.10) * 100 ).toFixed(0)}% max`,
+      subtext: `Risk Limit: ${( (account?.max_drawdown_limit_pct ?? 0.95) * 100 ).toFixed(0)}% max`,
       icon: AlertTriangle,
-      color: drawdown > 0.05 ? 'text-rose-400' : 'text-emerald-400',
-      bg: drawdown > 0.05 ? 'bg-rose-500/10' : 'bg-emerald-500/10',
-      border: drawdown > 0.05 ? 'border-rose-500/20' : 'border-emerald-500/20',
+      color: drawdown > 0.15 ? 'text-rose-400' : 'text-emerald-400',
+      badge: 'GUARD',
     },
     {
       title: 'Risk Allocation',
-      value: '1.0% Max Risk',
-      subtext: 'Max $10.00 / trade on $50',
+      value: '25% Max Risk',
+      subtext: 'Max $10,000 / trade on Testnet',
       icon: ShieldCheck,
-      color: 'text-purple-400',
-      bg: 'bg-purple-500/10',
-      border: 'border-purple-500/20',
+      color: 'text-zinc-300',
+      badge: 'MAX RISK',
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
       {cards.map((card, idx) => {
         const Icon = card.icon;
         return (
           <div
             key={idx}
-            className={`p-4 rounded-xl bg-slate-900/60 border ${card.border} backdrop-blur shadow-sm hover:border-slate-700 transition duration-200`}
+            className="p-4 rounded-xl bg-[#09090b] border border-zinc-800 hover:border-zinc-700 transition duration-200 shadow-sm flex flex-col justify-between"
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-slate-400 truncate">{card.title}</span>
-              <div className={`p-1.5 rounded-lg ${card.bg}`}>
-                <Icon className={`w-4 h-4 ${card.color}`} />
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-mono font-medium text-zinc-400 truncate">{card.title}</span>
+              <div className="p-1.5 rounded-lg bg-black border border-zinc-800">
+                <Icon className={`w-3.5 h-3.5 ${card.color}`} />
               </div>
             </div>
-            <div className="text-xl font-bold text-white tracking-tight">{card.value}</div>
-            <div className="text-[11px] font-medium text-slate-400 mt-1 truncate">{card.subtext}</div>
+            <div>
+              <div className={`text-xl font-black font-mono tracking-tight ${card.color}`}>{card.value}</div>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-900 text-[11px] font-mono text-zinc-400">
+                <span className="truncate">{card.subtext}</span>
+                <span className="text-[9px] bg-zinc-900 text-zinc-400 px-1 py-0.2 rounded border border-zinc-800 shrink-0 ml-1">
+                  {card.badge}
+                </span>
+              </div>
+            </div>
           </div>
         );
       })}
