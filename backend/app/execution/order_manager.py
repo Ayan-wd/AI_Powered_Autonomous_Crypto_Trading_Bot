@@ -280,12 +280,19 @@ class OrderManager:
         session: Optional[AsyncSession] = None,
         bid_price: Optional[float] = None,
         ask_price: Optional[float] = None,
+        atr: float = 0.0,
     ) -> Optional[Dict[str, Any]]:
-        """Evaluate SL/TP hits on active position with conservative adverse slippage."""
+        """
+        Evaluate SL/TP hits on active position with conservative adverse slippage.
+        Applies dynamic Breakeven Lock (+1.0R) and Chandelier ATR Trailing Stop.
+        """
         if not self.simulator.active_position:
             return None
 
         pos = self.simulator.active_position
+        pos.update_mark_price(current_price)
+        pos.update_trailing_and_breakeven(current_price, atr=atr)
+
         high_val = candle_high if candle_high is not None else current_price
         low_val = candle_low if candle_low is not None else current_price
 
@@ -311,12 +318,6 @@ class OrderManager:
                     bid_price=bid_price,
                 )
 
-        # Just update mark price
-        pos.update_mark_price(current_price)
-        return None
-
-        # Just update mark price
-        pos.update_mark_price(current_price)
         return None
 
     def reset_paper_account(self, starting_capital: Optional[float] = None) -> None:

@@ -9,10 +9,14 @@ import numpy as np
 import pandas as pd
 from backend.app.core.logging import logger
 from backend.app.features.technical_indicators import (
+    compute_adx,
     compute_atr,
     compute_bollinger_bands,
+    compute_chandelier_exit,
+    compute_choppiness_index,
     compute_ema,
     compute_macd,
+    compute_mfi,
     compute_returns,
     compute_rolling_volatility,
     compute_rsi,
@@ -143,6 +147,19 @@ class FeaturePipeline:
         df.loc[df["atr_pct"] > atr_pct_q75, "regime_volatility"] = 1
         df.loc[df["atr_pct"] < atr_pct_q25, "regime_volatility"] = -1
 
+        # 7. Advanced Quantitative Regime Indicators
+        adx, plus_di, minus_di = compute_adx(high, low, close, 14)
+        df["adx_14"] = adx
+        df["plus_di_14"] = plus_di
+        df["minus_di_14"] = minus_di
+
+        df["chop_14"] = compute_choppiness_index(high, low, close, 14)
+        df["mfi_14"] = compute_mfi(high, low, close, volume, 14)
+
+        ch_long, ch_short = compute_chandelier_exit(high, low, close, 22, 2.5)
+        df["chandelier_long"] = ch_long
+        df["chandelier_short"] = ch_short
+
         if drop_na:
             df.dropna(subset=FEATURE_COLUMNS, inplace=True)
 
@@ -201,5 +218,12 @@ class FeaturePipeline:
             "volatility_regime": int(latest_row["regime_volatility"]),
             "atr_pct": float(latest_row["atr_pct"]),
             "bb_width": float(latest_row["bb_width"]),
+            "adx": float(latest_row.get("adx_14", 20.0)),
+            "plus_di": float(latest_row.get("plus_di_14", 0.0)),
+            "minus_di": float(latest_row.get("minus_di_14", 0.0)),
+            "chop": float(latest_row.get("chop_14", 50.0)),
+            "mfi": float(latest_row.get("mfi_14", 50.0)),
+            "chandelier_long": float(latest_row.get("chandelier_long", 0.0)),
+            "chandelier_short": float(latest_row.get("chandelier_short", 0.0)),
         }
         return features, meta

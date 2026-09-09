@@ -45,12 +45,49 @@ class PaperPosition:
         self.explanation_json = explanation_json
         self.highest_price = entry_price
         self.current_price = entry_price
+        self.initial_risk = abs(entry_price - stop_loss) if stop_loss else entry_price * 0.015
+        self.breakeven_triggered = False
+        self.trailing_stop_active = False
 
     def update_mark_price(self, mark_price: float) -> None:
         """Update current mark price and track highest price for trailing logic."""
         self.current_price = mark_price
         if mark_price > self.highest_price:
             self.highest_price = mark_price
+
+    def update_trailing_and_breakeven(self, current_price: float, atr: float = 0.0) -> Optional[str]:
+        """
+        Adaptive Stop Management:
+        1. Breakeven Lock: When price reaches >= entry + 1.0R (or +0.60%), ratchet Stop-Loss to entry + 0.20%
+           (guaranteeing zero capital risk and covering round-trip exchange fees).
+        2. Chandelier Trailing Stop: Once in profit, trail Stop-Loss at highest_price - (1.5 * ATR).
+           Stop-Loss monotonically ratchets UP only, never down.
+        """
+        if self.side != "BUY" or self.stop_loss is None:
+            return None
+
+        event: Optional[str] = None
+        r_multiple = (self.highest_price - self.entry_price) / self.initial_risk if self.initial_risk > 0 else 0.0
+
+        # 1. Breakeven Lock at +1.0R gain
+        breakeven_target = self.entry_price * 1.002  # +0.20% to cover round-trip exchange fees
+        if not self.breakeven_triggered and r_multiple >= 1.0:
+            if breakeven_target > self.stop_loss:
+                self.stop_loss = breakeven_target
+                self.breakeven_triggered = True
+                event = f"BREAKEVEN_LOCK (Price gained +{r_multiple:.2f}R | SL locked to ${self.stop_loss:.2f})"
+                logger.info(f"[{self.symbol}] {event}")
+
+        # 2. Chandelier / ATR Trailing Stop (requires positive ATR)
+        if atr > 0.0:
+            chandelier_trail = self.highest_price - (1.5 * atr)
+            if chandelier_trail > self.stop_loss and chandelier_trail > self.entry_price:
+                self.stop_loss = chandelier_trail
+                self.trailing_stop_active = True
+                event = f"TRAILING_STOP_RATCHET (High ${self.highest_price:.2f} | SL ratcheted to ${self.stop_loss:.2f})"
+                logger.info(f"[{self.symbol}] {event}")
+
+        return event
 
     @property
     def position_value_usd(self) -> float:
@@ -86,6 +123,8 @@ class PaperPosition:
             "entry_time": self.entry_time.isoformat(),
             "model_probability": self.model_probability,
             "strategy_reason": self.strategy_reason,
+            "breakeven_triggered": self.breakeven_triggered,
+            "trailing_stop_active": self.trailing_stop_active,
         }
 
 
@@ -254,14 +293,14 @@ class PaperExchangeSimulator:
 
         # IMPOSSIBLE-PRICE GUARD on Stop-Loss:
         # A Long position stopped out can NEVER execute at a price higher than pos.stop_loss
-        # nor can it execute above entry_price to create artificial profits.
+        # For initial stop loss (not ratcheted by breakeven/trailing), cannot execute above entry.
         if pos.side == "BUY" and exit_reason == "STOP_LOSS":
             if pos.stop_loss is not None:
                 max_allowed_sl_exit = pos.stop_loss * (1.0 - slip_rate)
                 execution_price = min(execution_price, max_allowed_sl_exit)
-            # Ensure a stop-loss is strictly at or below entry price
-            if execution_price >= pos.entry_price:
-                execution_price = pos.entry_price * (1.0 - max(slip_rate, 0.001))
+            if not pos.breakeven_triggered and not pos.trailing_stop_active:
+                if execution_price >= pos.entry_price:
+                    execution_price = pos.entry_price * (1.0 - max(slip_rate, 0.001))
 
         gross_return_usd = pos.quantity * execution_price
         exit_fee_usd = gross_return_usd * self.fee_rate
@@ -319,21 +358,34 @@ class PaperExchangeSimulator:
         candle_low: Optional[float] = None,
         bid_price: Optional[float] = None,
         ask_price: Optional[float] = None,
+        atr: float = 0.0,
     ) -> Optional[Dict[str, Any]]:
         """
         Check if active position hit Stop-Loss or Take-Profit thresholds.
         Evaluates intrabar price extremes conservatively with adverse slippage.
+        Dynamically applies Breakeven Lock (+1.0R) and Chandelier ATR Trailing Stop.
         """
         if self.active_position is None:
             return None
 
         pos = self.active_position
         pos.update_mark_price(current_price)
+        pos.update_trailing_and_breakeven(current_price, atr=atr)
 
         high_val = candle_high if candle_high is not None else current_price
         low_val = candle_low if candle_low is not None else current_price
 
-        # Check Stop Loss Trigger for LONG position
+        # 1. Check Take Profit Trigger for LONG position
+        if pos.side == "BUY" and pos.take_profit is not None:
+            if high_val >= pos.take_profit or current_price >= pos.take_profit:
+                return self.execute_market_sell(
+                    exit_price=pos.take_profit,
+                    exit_reason="TAKE_PROFIT",
+                    bid_price=bid_price,
+                    adverse_slippage_pct=self.slippage_rate,
+                )
+
+        # 2. Check Stop Loss Trigger for LONG position
         if pos.side == "BUY" and pos.stop_loss is not None:
             if low_val <= pos.stop_loss or current_price <= pos.stop_loss:
                 # Conservative fill: cannot assume fill at exact stop price if market breached deeper
@@ -343,16 +395,6 @@ class PaperExchangeSimulator:
                     exit_reason="STOP_LOSS",
                     bid_price=bid_price,
                     adverse_slippage_pct=max(self.slippage_rate, 0.001),  # At least 0.1% adverse slippage on SL
-                )
-
-        # Check Take Profit Trigger for LONG position
-        if pos.side == "BUY" and pos.take_profit is not None:
-            if high_val >= pos.take_profit or current_price >= pos.take_profit:
-                return self.execute_market_sell(
-                    exit_price=pos.take_profit,
-                    exit_reason="TAKE_PROFIT",
-                    bid_price=bid_price,
-                    adverse_slippage_pct=self.slippage_rate,
                 )
 
         return None

@@ -44,9 +44,12 @@ class PositionSizer:
         # 1. Fixed fractional risk dollar amount
         risk_budget_usd = account_equity * self.max_risk_pct
 
-        # 2. Risk per unit based on stop loss distance
+        # 2. Risk per unit based on stop loss distance and ATR
         price_risk_per_unit = abs(current_price - stop_loss_price)
-        if price_risk_per_unit <= 0:
+        if atr > 0:
+            # Volatility-targeted safeguard: enforce unit risk is at least 1.0 * ATR to prevent overleveraging on tight stops
+            price_risk_per_unit = max(price_risk_per_unit, 0.75 * atr)
+        elif price_risk_per_unit <= 0:
             # Fallback to default stop loss percentage
             price_risk_per_unit = current_price * settings.DEFAULT_STOP_LOSS_PCT
 

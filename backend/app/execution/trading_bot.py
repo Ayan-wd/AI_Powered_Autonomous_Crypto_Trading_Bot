@@ -18,6 +18,7 @@ from backend.app.database.database import async_session_factory
 from backend.app.database.models import EquitySnapshot
 from backend.app.database.repositories import EquityRepository, LogRepository
 from backend.app.execution.order_manager import order_manager
+from backend.app.features.feature_engineering import FeaturePipeline
 from backend.app.risk.risk_manager import risk_manager
 from backend.app.strategy.strategy_engine import strategy_engine
 
@@ -131,11 +132,24 @@ class TradingBotEngine:
                     "timestamp": ticker.timestamp,
                 })
 
+                # Load candles to calculate live ATR for adaptive trailing stop and breakeven
+                df = await self.market_engine.get_candles_dataframe(
+                    symbol=pos_symbol,
+                    timeframe=self.timeframe,
+                    limit=100,
+                    session=session,
+                )
+                atr_val = 0.0
+                if not df.empty and len(df) >= 15:
+                    df_feats = FeaturePipeline.build_features(df, drop_na=False)
+                    atr_val = float(df_feats["atr_14"].iloc[-1]) if "atr_14" in df_feats.columns else 0.0
+
                 sl_tp_closed = await order_manager.check_intrabar_triggers(
                     current_price=current_price,
                     session=session,
                     bid_price=ticker.bid_price,
                     ask_price=ticker.ask_price,
+                    atr=atr_val,
                 )
                 if sl_tp_closed:
                     logger.info(f"Intrabar trigger closed trade: {sl_tp_closed['trade_id']} ({sl_tp_closed['exit_reason']})")
@@ -144,12 +158,6 @@ class TradingBotEngine:
                     return
 
                 # Update trailing decision on open position
-                df = await self.market_engine.get_candles_dataframe(
-                    symbol=pos_symbol,
-                    timeframe=self.timeframe,
-                    limit=100,
-                    session=session,
-                )
                 if not df.empty:
                     balances = order_manager.get_account_balances(current_price)
                     decision = strategy_engine.evaluate_decision(
@@ -176,7 +184,7 @@ class TradingBotEngine:
                             await ws_manager.broadcast("POSITION_UPDATE", None)
                 return
 
-            # 2. No active position open -> Scan candidate coin(s)
+            # 2. No active position open -> Scan candidate coin(s) with Conviction Ranking
             symbols_to_scan = (
                 settings.SUPPORTED_SYMBOLS
                 if self.symbol in ("ALL", "MULTI", "WATCHLIST")
@@ -189,6 +197,8 @@ class TradingBotEngine:
             if not can_trade:
                 logger.warning(f"Risk Gatekeeper preventing new trades: {denial_reason}")
                 return
+
+            candidate_opportunities = []
 
             for sym in symbols_to_scan:
                 try:
@@ -227,31 +237,50 @@ class TradingBotEngine:
 
                     action = decision.get("action")
                     if action == "BUY" and decision.get("order_details"):
-                        order_det = decision["order_details"]
-                        logger.info(f"Executing BUY order on {sym}: {decision['reason']}")
-                        open_res = await order_manager.open_position(
-                            symbol=sym,
-                            price=current_price,
-                            position_size_usd=order_det.get("position_size_usd") or order_det.get("position_value_usd", 10.0),
-                            stop_loss=order_det["stop_loss"],
-                            take_profit=order_det["take_profit"],
-                            model_probability=decision.get("confidence"),
-                            strategy_reason=decision.get("reason"),
-                            explanation_json=json.dumps(decision.get("numerical_explanation", [])),
-                            session=session,
-                            ask_price=ticker.ask_price,
-                            bid_price=ticker.bid_price,
-                        )
-                        if open_res.get("status") != "FILLED":
-                            logger.warning(f"Order rejected by OrderManager: {open_res.get('reason')}")
-                            continue
-
-                        await ws_manager.broadcast("ORDER_FILLED", open_res)
-                        await ws_manager.broadcast("POSITION_UPDATE", order_manager.get_active_position())
-                        # Only 1 position at a time (anti-Martingale & capital preservation)
-                        break
+                        conviction = decision.get("conviction_score") or decision.get("confidence", 0.60)
+                        candidate_opportunities.append({
+                            "symbol": sym,
+                            "ticker": ticker,
+                            "current_price": current_price,
+                            "decision": decision,
+                            "conviction": conviction,
+                        })
                 except Exception as e:
                     logger.warning(f"Error scanning candidate coin {sym}: {e}")
+
+            # 3. Multi-Asset Conviction Selection: Open the single highest-probability trade
+            if candidate_opportunities:
+                candidate_opportunities.sort(key=lambda x: x["conviction"], reverse=True)
+                top_cand = candidate_opportunities[0]
+                best_sym = top_cand["symbol"]
+                best_ticker = top_cand["ticker"]
+                best_price = top_cand["current_price"]
+                best_decision = top_cand["decision"]
+                order_det = best_decision["order_details"]
+
+                logger.info(
+                    f"🏆 [CONVICTION RANKER] Selected Top Opportunity: {best_sym} "
+                    f"(Score: {top_cand['conviction'] * 100:.1f}%) among {len(candidate_opportunities)} evaluated setups."
+                )
+
+                open_res = await order_manager.open_position(
+                    symbol=best_sym,
+                    price=best_price,
+                    position_size_usd=order_det.get("position_size_usd") or order_det.get("position_value_usd", 10.0),
+                    stop_loss=order_det["stop_loss"],
+                    take_profit=order_det["take_profit"],
+                    model_probability=best_decision.get("confidence"),
+                    strategy_reason=best_decision.get("reason"),
+                    explanation_json=json.dumps(best_decision.get("numerical_explanation", [])),
+                    session=session,
+                    ask_price=best_ticker.ask_price,
+                    bid_price=best_ticker.bid_price,
+                )
+                if open_res.get("status") == "FILLED":
+                    await ws_manager.broadcast("ORDER_FILLED", open_res)
+                    await ws_manager.broadcast("POSITION_UPDATE", order_manager.get_active_position())
+                else:
+                    logger.warning(f"Order rejected by OrderManager: {open_res.get('reason')}")
 
             # 7. Periodically record equity snapshot (every ~12 ticks = 60s)
             if self.iteration_count % 12 == 0:
