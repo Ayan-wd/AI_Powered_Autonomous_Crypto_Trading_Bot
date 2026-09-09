@@ -113,7 +113,7 @@ export function App() {
       if (securityRes) setSecurityAudit(securityRes);
       setApiConnected(true);
     } catch (err: any) {
-      console.warn('API polling warning:', err);
+      console.warn('API polling warnin:', err);
       setApiConnected(false);
     } finally {
       setLoading(false);
